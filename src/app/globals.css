@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+:root {
+  /* 위너 통합 ERP 컬러 */
+  --color-ink: #1a1d24;
+  --color-muted: #6b7280;
+  --background: #f7f8fa;
+  --foreground: #1a1d24;
+  color-scheme: light only;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* 표 기본 스타일 보조 */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
