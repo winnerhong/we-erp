@@ -6,6 +6,7 @@ import Link from "next/link";
 import { InlineSelect } from "@/components/inline-select";
 import { OptionsManager } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
+import { ExcelGrid, type GridCol } from "@/components/excel-grid";
 import { Field, TextInput, SelectInput, Badge, FormSection } from "@/components/ui";
 import { krw, LEAVE_TYPE_LABEL, LEAVE_STATUS_LABEL } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
@@ -179,6 +180,7 @@ export function EmployeesClient({
     initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as TabKey) : "info"
   );
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? rows[0]?.id ?? null);
+  const [view, setView] = useState<"card" | "grid">("card");
 
   const companyName = new Map(ctx.companies.map((c) => [c.id, c.name]));
   const optsOf = (cat: string) => options.filter((o) => o.category === cat && o.is_active);
@@ -212,7 +214,28 @@ export function EmployeesClient({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-neutral-900">직원 관리</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-neutral-900">직원 관리</h1>
+          {/* 보기 전환: 카드형(상세) ↔ 엑셀형(빠른 입력) */}
+          <div className="inline-flex rounded-lg border border-neutral-300 bg-white p-0.5 text-sm">
+            <button
+              onClick={() => setView("card")}
+              className={`rounded-md px-2.5 py-1 font-medium ${
+                view === "card" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              🗂 카드형
+            </button>
+            <button
+              onClick={() => setView("grid")}
+              className={`rounded-md px-2.5 py-1 font-medium ${
+                view === "grid" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              ▦ 엑셀형
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setMgrOpen(true)}
@@ -236,6 +259,24 @@ export function EmployeesClient({
         </div>
       </div>
 
+      {view === "grid" ? (
+        <EmployeeGrid
+          rows={rows}
+          ctx={ctx}
+          empSel={empSel}
+          roleSel={roleSel}
+          statusSel={statusSel}
+          empLabel={empLabel}
+          roleLabel={roleLabel}
+          statusLabel={statusLabel}
+          companyName={companyName}
+          onOpenDetail={(id) => {
+            setSelectedId(id);
+            setView("card");
+          }}
+          onChanged={refresh}
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
         {/* 좌측 목록 */}
         <div className="rounded-2xl border border-neutral-200 bg-white">
@@ -410,6 +451,7 @@ export function EmployeesClient({
           </div>
         )}
       </div>
+      )}
 
       {mgrOpen && (
         <OptionsManager
@@ -474,6 +516,191 @@ export function EmployeesClient({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ---------- 엑셀형 일괄입력 그리드 ----------
+// 셀 클릭→바로 편집(updateRow), 맨 아래 +행 추가로 빈 직원 즉시 생성. winner 엑셀리스트 사용감.
+const GRID_NUM_FIELDS = new Set(["base_salary", "hourly_wage", "dependents", "children_under20", "weekly_hours"]);
+// 빈 값을 null 로 두면 안 되는(NOT NULL) 컬럼 — 빈 문자열/선택값 그대로 저장
+const GRID_KEEP_FIELDS = new Set(["name", "employment_type", "role"]);
+
+function EmployeeGrid({
+  rows,
+  ctx,
+  empSel,
+  roleSel,
+  statusSel,
+  empLabel,
+  roleLabel,
+  statusLabel,
+  companyName,
+  onOpenDetail,
+  onChanged,
+}: {
+  rows: EmployeeRow[];
+  ctx: ImportCtx;
+  empSel: { value: string; label: string }[];
+  roleSel: { value: string; label: string }[];
+  statusSel: { value: string; label: string }[];
+  empLabel: Record<string, string>;
+  roleLabel: Record<string, string>;
+  statusLabel: Record<string, string>;
+  companyName: Map<string, string>;
+  onOpenDetail: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [, startTransition] = useTransition();
+
+  const numOrNull = (s: string) => {
+    const n = Number(s.replace(/[^\d.-]/g, ""));
+    return s.trim() === "" || !Number.isFinite(n) ? null : n;
+  };
+
+  // 셀 편집 커밋 → 모달 저장과 동일한 변환 규칙
+  function handleEdit(id: string, key: string, raw: string) {
+    let value: unknown;
+    if (GRID_NUM_FIELDS.has(key)) value = numOrNull(raw);
+    else if (GRID_KEEP_FIELDS.has(key)) value = key === "name" ? raw.trim() : raw;
+    else value = raw.trim() === "" ? null : raw.trim();
+    startTransition(async () => {
+      await updateRow("employees", id, { [key]: value });
+      onChanged();
+    });
+  }
+
+  // +행 추가 → 빈 직원 즉시 생성. 모든 행이 같은 사업자면 그 사업자로 자동 배정.
+  const soleCompany =
+    rows.length > 0 && rows.every((r) => r.company_id === rows[0].company_id) ? rows[0].company_id : null;
+  function handleAdd() {
+    startTransition(async () => {
+      await createRow("employees", {
+        name: "",
+        company_id: soleCompany,
+        employment_type: empSel[0]?.value ?? "FULL_TIME",
+        role: roleSel[0]?.value ?? "MEMBER",
+      });
+      onChanged();
+    });
+  }
+
+  const companyOpts = [{ value: "", label: "미배정" }, ...ctx.companies.map((c) => ({ value: c.id, label: c.name }))];
+  const statusOpts = [{ value: "", label: "미지정" }, ...statusSel];
+
+  const columns: GridCol<EmployeeRow>[] = [
+    { key: "name", label: "이름", width: 110, edit: "text", text: (r) => r.name ?? "" },
+    { key: "nickname", label: "닉네임", width: 100, edit: "text", text: (r) => r.nickname ?? "" },
+    {
+      key: "company_id",
+      label: "소속",
+      width: 140,
+      edit: "select",
+      options: companyOpts,
+      text: (r) => (r.company_id ? companyName.get(r.company_id) ?? "" : "미배정"),
+    },
+    {
+      key: "employment_type",
+      label: "고용형태",
+      width: 100,
+      edit: "select",
+      options: empSel,
+      text: (r) => empLabel[r.employment_type] ?? r.employment_type,
+    },
+    { key: "role", label: "권한", width: 90, edit: "select", options: roleSel, text: (r) => roleLabel[r.role] ?? r.role },
+    {
+      key: "status",
+      label: "상태",
+      width: 90,
+      edit: "select",
+      options: statusOpts,
+      text: (r) => (r.status ? statusLabel[r.status] ?? r.status : ""),
+    },
+    { key: "phone", label: "연락처", width: 130, edit: "text", text: (r) => r.phone ?? "" },
+    { key: "email", label: "이메일", width: 160, edit: "text", text: (r) => r.email ?? "" },
+    { key: "hired_on", label: "입사일", width: 120, edit: "date", text: (r) => r.hired_on ?? "" },
+    {
+      key: "base_salary",
+      label: "기본급(월)",
+      width: 110,
+      align: "right",
+      edit: "number",
+      text: (r) => (r.base_salary != null ? r.base_salary.toLocaleString() : ""),
+    },
+    {
+      key: "hourly_wage",
+      label: "시급",
+      width: 90,
+      align: "right",
+      edit: "number",
+      text: (r) => (r.hourly_wage != null ? r.hourly_wage.toLocaleString() : ""),
+    },
+    { key: "bank_name", label: "은행", width: 80, edit: "text", text: (r) => r.bank_name ?? "" },
+    { key: "account_number", label: "계좌번호", width: 140, edit: "text", text: (r) => r.account_number ?? "" },
+    { key: "account_holder", label: "예금주", width: 90, edit: "text", text: (r) => r.account_holder ?? "" },
+    // 인적사항·근로조건 — 기본 표시되지만 ‘👁 컬럼 표시’로 숨길 수 있음
+    { key: "birth", label: "생년월일", width: 120, edit: "date", text: (r) => r.birth ?? "" },
+    { key: "address", label: "주소", width: 180, edit: "text", text: (r) => r.address ?? "" },
+    { key: "emergency_contact", label: "비상연락처", width: 130, edit: "text", text: (r) => r.emergency_contact ?? "" },
+    {
+      key: "dependents",
+      label: "부양가족",
+      width: 80,
+      align: "right",
+      edit: "number",
+      text: (r) => (r.dependents != null ? String(r.dependents) : ""),
+    },
+    {
+      key: "children_under20",
+      label: "20세이하자녀",
+      width: 95,
+      align: "right",
+      edit: "number",
+      text: (r) => (r.children_under20 != null ? String(r.children_under20) : ""),
+    },
+    {
+      key: "weekly_hours",
+      label: "주근로(h)",
+      width: 90,
+      align: "right",
+      edit: "number",
+      text: (r) => (r.weekly_hours != null ? String(r.weekly_hours) : ""),
+    },
+    { key: "memo", label: "메모", width: 160, edit: "text", text: (r) => r.memo ?? "" },
+    {
+      key: "_open",
+      label: "상세",
+      width: 64,
+      align: "center",
+      render: (r) => (
+        <button
+          onClick={() => onOpenDetail(r.id)}
+          className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-50"
+        >
+          열기 ↗
+        </button>
+      ),
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-3">
+      <p className="mb-2 px-1 text-xs text-neutral-400">
+        셀을 클릭하면 바로 수정됩니다 · 맨 아래 <b>+ 직원 행 추가</b>로 연속 입력 · 헤더 드래그로 순서 변경, 우측 경계 드래그로 폭 조정
+      </p>
+      <ExcelGrid
+        storageKey="erp_employees_grid"
+        columns={columns}
+        rows={rows}
+        rowId={(r) => r.id}
+        onEdit={handleEdit}
+        onAddRow={handleAdd}
+        addLabel="+ 직원 행 추가"
+        accent={(r) => !r.name?.trim()}
+        empty="직원이 없습니다. ‘+ 직원 행 추가’로 시작하세요."
+        pageSize={30}
+        searchPlaceholder="🔍 이름·닉네임·연락처·소속 검색"
+      />
     </div>
   );
 }

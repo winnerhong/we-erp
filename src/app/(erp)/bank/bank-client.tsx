@@ -2001,6 +2001,24 @@ interface PreviewRow {
   error?: string;
 }
 
+// 직접 입력(엑셀형) 한 행 — 키는 표준 양식 헤더와 동일해 parseBankRow 가 그대로 인식.
+interface DraftTxn {
+  _id: string;
+  거래일자: string;
+  적요: string;
+  거래처: string;
+  입금: string;
+  출금: string;
+}
+
+const DRAFT_COLS: GridCol<DraftTxn>[] = [
+  { key: "거래일자", label: "거래일자", width: 130, edit: "date", text: (r) => r.거래일자 },
+  { key: "적요", label: "내용(적요)", width: 200, edit: "text", text: (r) => r.적요 },
+  { key: "거래처", label: "거래처", width: 140, edit: "text", text: (r) => r.거래처 },
+  { key: "입금", label: "입금", width: 120, align: "right", edit: "number", text: (r) => r.입금 },
+  { key: "출금", label: "출금", width: 120, align: "right", edit: "number", text: (r) => r.출금 },
+];
+
 function ImportModal({
   account,
   onClose,
@@ -2024,6 +2042,36 @@ function ImportModal({
   const errorCount = rows.length - validCount;
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // 입력 방식: 파일·붙여넣기(import) ↔ 직접 입력(엑셀형 manual)
+  const [inputMode, setInputMode] = useState<"import" | "manual">("import");
+  const draftSeq = useRef(0);
+  const blankDraft = (): DraftTxn => ({
+    _id: `d${draftSeq.current++}`,
+    거래일자: "",
+    적요: "",
+    거래처: "",
+    입금: "",
+    출금: "",
+  });
+  const [drafts, setDrafts] = useState<DraftTxn[]>([]);
+  function switchToManual() {
+    setInputMode("manual");
+    setRows([]);
+    setResult(null);
+    setParseError(null);
+    if (drafts.length === 0) setDrafts([blankDraft(), blankDraft(), blankDraft()]);
+  }
+  function editDraft(id: string, key: string, value: string) {
+    setDrafts((ds) => ds.map((d) => (d._id === id ? { ...d, [key]: value } : d)));
+  }
+  function previewDrafts() {
+    const filled = drafts.filter((d) => d.거래일자.trim() || d.입금.trim() || d.출금.trim() || d.적요.trim());
+    preview(
+      filled.map(({ _id, ...rest }) => { void _id; return rest; }),
+      "입력된 행이 없습니다. 거래일자와 입금 또는 출금 금액을 채워주세요."
+    );
+  }
 
   function downloadTemplate() {
     const csv = buildCSV(BANK_TEMPLATE_HEADERS, [BANK_TEMPLATE_SAMPLE]);
@@ -2124,6 +2172,7 @@ function ImportModal({
       setResult({ inserted, skipped, failed, error });
       setRows([]);
       setPasteText("");
+      setDrafts([]);
       if (fileRef.current) fileRef.current.value = "";
       onDone(gotoMonth);
     });
@@ -2137,56 +2186,107 @@ function ImportModal({
           자동 인식합니다. <b>여러 번 올려도 새 거래만 추가</b>되고, 이미 달아둔 거래처·계산서·메모는 그대로 유지됩니다(자동 병합).
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* 입력 방식 전환 */}
+        <div className="inline-flex rounded-lg border border-neutral-300 bg-white p-0.5 text-sm">
           <button
-            onClick={downloadTemplate}
-            className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium hover:bg-neutral-50"
+            onClick={() => setInputMode("import")}
+            className={`rounded-md px-3 py-1 font-medium ${
+              inputMode === "import" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"
+            }`}
           >
-            양식 다운로드
+            📂 파일·붙여넣기
           </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
-            onChange={onFile}
-            className="block text-sm file:mr-3 file:rounded-lg file:border file:border-neutral-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-neutral-50"
-          />
+          <button
+            onClick={switchToManual}
+            className={`rounded-md px-3 py-1 font-medium ${
+              inputMode === "manual" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"
+            }`}
+          >
+            ▦ 직접 입력(엑셀형)
+          </button>
         </div>
 
-        {/* 붙여넣기 입력 */}
-        <div className="rounded-lg border border-dashed border-neutral-300 p-3">
-          <p className="mb-2 text-xs font-medium text-neutral-600">
-            📋 또는 통장 화면에서 표를 복사해 그대로 붙여넣기
-            <span className="ml-1 font-normal text-neutral-400">(머리글 줄 포함 · 잔액은 자동 제외되어 우리 원장 기준으로 계산)</span>
-          </p>
-          <textarea
-            value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
-            onPaste={(e) => {
-              const t = e.clipboardData.getData("text");
-              const html = e.clipboardData.getData("text/html");
-              if (t || html) {
-                e.preventDefault();
-                setPasteText(t);
-                const parsed = parseClipboard(html, t);
-                setTimeout(
-                  () => preview(parsed, "표를 인식하지 못했습니다. 머리글 줄을 포함해 복사하세요."),
-                  0
-                );
-              }
-            }}
-            rows={4}
-            placeholder={"거래일시\t구분\t내용\t출금\t입금\t잔액\n2024.03.01 21:46\t인터넷\t노우잔\t0\t90,000\t..."}
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-xs focus:border-neutral-500 focus:outline-none"
-          />
-          <button
-            onClick={onPastePreview}
-            disabled={!pasteText.trim()}
-            className="mt-2 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-neutral-50 disabled:opacity-40"
-          >
-            붙여넣기 미리보기
-          </button>
-        </div>
+        {inputMode === "import" ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={downloadTemplate}
+                className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium hover:bg-neutral-50"
+              >
+                양식 다운로드
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+                onChange={onFile}
+                className="block text-sm file:mr-3 file:rounded-lg file:border file:border-neutral-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-neutral-50"
+              />
+            </div>
+
+            {/* 붙여넣기 입력 */}
+            <div className="rounded-lg border border-dashed border-neutral-300 p-3">
+              <p className="mb-2 text-xs font-medium text-neutral-600">
+                📋 또는 통장 화면에서 표를 복사해 그대로 붙여넣기
+                <span className="ml-1 font-normal text-neutral-400">(머리글 줄 포함 · 잔액은 자동 제외되어 우리 원장 기준으로 계산)</span>
+              </p>
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                onPaste={(e) => {
+                  const t = e.clipboardData.getData("text");
+                  const html = e.clipboardData.getData("text/html");
+                  if (t || html) {
+                    e.preventDefault();
+                    setPasteText(t);
+                    const parsed = parseClipboard(html, t);
+                    setTimeout(
+                      () => preview(parsed, "표를 인식하지 못했습니다. 머리글 줄을 포함해 복사하세요."),
+                      0
+                    );
+                  }
+                }}
+                rows={4}
+                placeholder={"거래일시\t구분\t내용\t출금\t입금\t잔액\n2024.03.01 21:46\t인터넷\t노우잔\t0\t90,000\t..."}
+                className="w-full rounded-lg border border-neutral-300 px-3 py-2 font-mono text-xs focus:border-neutral-500 focus:outline-none"
+              />
+              <button
+                onClick={onPastePreview}
+                disabled={!pasteText.trim()}
+                className="mt-2 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-neutral-50 disabled:opacity-40"
+              >
+                붙여넣기 미리보기
+              </button>
+            </div>
+          </>
+        ) : (
+          /* 직접 입력(엑셀형) */
+          <div className="rounded-lg border border-dashed border-neutral-300 p-3">
+            <p className="mb-2 text-xs font-medium text-neutral-600">
+              ▦ 셀을 클릭해 직접 입력하세요. <b>입금</b> 또는 <b>출금</b> 중 한 칸에 금액을 넣으면 방향이 정해집니다.
+              <span className="ml-1 font-normal text-neutral-400">(맨 아래 ‘+ 거래 행 추가’ · 잔액은 우리 원장 기준 자동 계산)</span>
+            </p>
+            <ExcelGrid
+              storageKey="erp_bank_manual_grid"
+              columns={DRAFT_COLS}
+              rows={drafts}
+              rowId={(r) => r._id}
+              onEdit={editDraft}
+              onAddRow={() => setDrafts((ds) => [...ds, blankDraft()])}
+              addLabel="+ 거래 행 추가"
+              accent={(r) => !!(r.입금.trim() || r.출금.trim()) && !r.거래일자.trim()}
+              empty="‘+ 거래 행 추가’로 입력을 시작하세요."
+              pageSize={50}
+              searchPlaceholder="🔍 내용·거래처 검색"
+            />
+            <button
+              onClick={previewDrafts}
+              className="mt-2 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-neutral-50"
+            >
+              입력한 표 미리보기
+            </button>
+          </div>
+        )}
 
         {parseError && <p className="text-sm text-rose-600">{parseError}</p>}
 

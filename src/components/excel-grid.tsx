@@ -39,6 +39,8 @@ interface Props<T> {
   selectable?: boolean;
   /** 선택 시 상단에 표시할 일괄 작업 UI. */
   renderBulk?: (ids: string[], clear: () => void) => ReactNode;
+  /** 검색창 placeholder(미지정 시 기본 문구). */
+  searchPlaceholder?: string;
 }
 
 const DEFAULT_W = 130;
@@ -67,6 +69,7 @@ export function ExcelGrid<T>({
   addLabel = "+ 행 추가",
   selectable,
   renderBulk,
+  searchPlaceholder = "통장내역 검색 (내용·거래처·금액 등)",
 }: Props<T>) {
   const allKeys = columns.map((c) => c.key);
   const colMap = new Map(columns.map((c) => [c.key, c]));
@@ -240,7 +243,7 @@ export function ExcelGrid<T>({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="통장내역 검색 (내용·거래처·금액 등)"
+            placeholder={searchPlaceholder}
             className="w-64 rounded-lg border border-neutral-300 bg-white py-1.5 pl-7 pr-7 text-sm focus:border-neutral-500 focus:outline-none"
           />
           {search && (

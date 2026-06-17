@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { InlineSelect } from "@/components/inline-select";
 import { OptionsManager } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
+import { ExcelGrid, type GridCol } from "@/components/excel-grid";
 import { Card, Field, TextInput, SelectInput, Badge, EmptyState, FormSection } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
@@ -139,6 +140,7 @@ export function PartnersClient({
   const [catFilter, setCatFilter] = useState<string>("ALL");
   const [tab, setTab] = useState<"info" | "ledger">("info");
   const [ledgerFilter, setLedgerFilter] = useState<"ALL" | LedgerEntry["source"]>("ALL");
+  const [view, setView] = useState<"card" | "grid">("card");
 
   const accountLabel = new Map(ctx.accounts.map((a) => [a.id, `${a.code} ${a.name}`]));
   const companyName = (id: string | null) => (id ? ctx.companies.find((c) => c.id === id)?.name ?? "?" : "공용");
@@ -173,7 +175,28 @@ export function PartnersClient({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-neutral-900">거래처 관리</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-neutral-900">거래처 관리</h1>
+          {/* 보기 전환: 카드형(상세) ↔ 엑셀형(빠른 입력) */}
+          <div className="inline-flex rounded-lg border border-neutral-300 bg-white p-0.5 text-sm">
+            <button
+              onClick={() => setView("card")}
+              className={`rounded-md px-2.5 py-1 font-medium ${
+                view === "card" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              🗂 카드형
+            </button>
+            <button
+              onClick={() => setView("grid")}
+              className={`rounded-md px-2.5 py-1 font-medium ${
+                view === "grid" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"
+              }`}
+            >
+              ▦ 엑셀형
+            </button>
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setMgrOpen(true)}
@@ -197,6 +220,17 @@ export function PartnersClient({
         </div>
       </div>
 
+      {view === "grid" ? (
+        <PartnerGrid
+          rows={rows}
+          ctx={ctx}
+          catSel={catSel}
+          catLabel={catLabel}
+          accountLabel={accountLabel}
+          onOpenDetail={go}
+          onChanged={() => router.refresh()}
+        />
+      ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
         {/* 좌측 목록 */}
         <div className="rounded-2xl border border-neutral-200 bg-white">
@@ -444,6 +478,7 @@ export function PartnersClient({
           </div>
         )}
       </div>
+      )}
 
       {mgrOpen && (
         <OptionsManager
@@ -480,6 +515,134 @@ export function PartnersClient({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ---------- 엑셀형 일괄입력 그리드 ----------
+// 셀 클릭→바로 편집(updateRow), 맨 아래 +행 추가로 빈 거래처 즉시 생성. winner 엑셀리스트 사용감.
+function PartnerGrid({
+  rows,
+  ctx,
+  catSel,
+  catLabel,
+  accountLabel,
+  onOpenDetail,
+  onChanged,
+}: {
+  rows: PartnerRow[];
+  ctx: ImportCtx;
+  catSel: { value: string; label: string }[];
+  catLabel: Record<string, string>;
+  accountLabel: Map<string, string>;
+  onOpenDetail: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [, startTransition] = useTransition();
+
+  // 셀 편집 커밋 → 모달 저장과 동일한 변환 규칙
+  function handleEdit(id: string, key: string, raw: string) {
+    let value: unknown;
+    if (key === "default_tax_rate") value = raw.trim() === "" ? null : Number(raw.replace(/[^\d.-]/g, ""));
+    else if (key === "name") value = raw.trim();
+    else value = raw.trim() === "" ? null : raw.trim();
+    startTransition(async () => {
+      await updateRow("partners", id, { [key]: value });
+      onChanged();
+    });
+  }
+
+  // +행 추가 → 빈 거래처 즉시 생성. 모든 행이 같은 사업자면 그 사업자로 자동 배정.
+  const soleCompany =
+    rows.length > 0 && rows.every((r) => r.company_id === rows[0].company_id) ? rows[0].company_id : null;
+  function handleAdd() {
+    startTransition(async () => {
+      await createRow("partners", { name: "", company_id: soleCompany });
+      onChanged();
+    });
+  }
+
+  const companyNameOf = (id: string | null) => (id ? ctx.companies.find((c) => c.id === id)?.name ?? "" : "공용");
+  const companyOpts = [{ value: "", label: "공용" }, ...ctx.companies.map((c) => ({ value: c.id, label: c.name }))];
+  const catOpts = [{ value: "", label: "미지정" }, ...catSel];
+  const accountOpts = [
+    { value: "", label: "미지정" },
+    ...ctx.accounts.map((a) => ({ value: a.id, label: `${a.code} ${a.name}` })),
+  ];
+
+  const columns: GridCol<PartnerRow>[] = [
+    { key: "name", label: "상호", width: 160, edit: "text", text: (r) => r.name ?? "" },
+    {
+      key: "category",
+      label: "구분",
+      width: 90,
+      edit: "select",
+      options: catOpts,
+      text: (r) => (r.category ? catLabel[r.category] ?? r.category : ""),
+    },
+    { key: "biz_no", label: "사업자번호", width: 130, edit: "text", text: (r) => r.biz_no ?? "" },
+    { key: "contact_name", label: "담당자", width: 90, edit: "text", text: (r) => r.contact_name ?? "" },
+    { key: "phone", label: "연락처", width: 130, edit: "text", text: (r) => r.phone ?? "" },
+    { key: "email", label: "이메일", width: 160, edit: "text", text: (r) => r.email ?? "" },
+    {
+      key: "company_id",
+      label: "소속",
+      width: 130,
+      edit: "select",
+      options: companyOpts,
+      text: (r) => companyNameOf(r.company_id),
+    },
+    {
+      key: "default_tax_rate",
+      label: "부가세율(%)",
+      width: 90,
+      align: "right",
+      edit: "number",
+      text: (r) => (r.default_tax_rate != null ? String(r.default_tax_rate) : ""),
+    },
+    {
+      key: "default_account_id",
+      label: "기본 계정과목",
+      width: 160,
+      edit: "select",
+      options: accountOpts,
+      text: (r) => (r.default_account_id ? accountLabel.get(r.default_account_id) ?? "" : ""),
+    },
+    { key: "memo", label: "메모", width: 160, edit: "text", text: (r) => r.memo ?? "" },
+    {
+      key: "_open",
+      label: "상세",
+      width: 64,
+      align: "center",
+      render: (r) => (
+        <button
+          onClick={() => onOpenDetail(r.id)}
+          className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-50"
+        >
+          열기 ↗
+        </button>
+      ),
+    },
+  ];
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-3">
+      <p className="mb-2 px-1 text-xs text-neutral-400">
+        셀을 클릭하면 바로 수정됩니다 · 맨 아래 <b>+ 거래처 행 추가</b>로 연속 입력 · 헤더 드래그로 순서 변경, 우측 경계 드래그로 폭 조정
+      </p>
+      <ExcelGrid
+        storageKey="erp_partners_grid"
+        columns={columns}
+        rows={rows}
+        rowId={(r) => r.id}
+        onEdit={handleEdit}
+        onAddRow={handleAdd}
+        addLabel="+ 거래처 행 추가"
+        accent={(r) => !r.name?.trim()}
+        empty="거래처가 없습니다. ‘+ 거래처 행 추가’로 시작하세요."
+        pageSize={30}
+        searchPlaceholder="🔍 상호·구분·사업자번호·담당자 검색"
+      />
     </div>
   );
 }
