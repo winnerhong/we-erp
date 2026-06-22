@@ -82,6 +82,29 @@ export async function deleteCardTxn(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/** 선택 행 일괄 수정(거래처·계정·구분 등 공용). */
+export async function bulkUpdateCardTxns(ids: string[], patch: Partial<CardTransactionRow>): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true };
+  const db = createAdminClient();
+  const { error } = await db.from("card_transactions").update(patch as never).in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/cards");
+  return { ok: true };
+}
+
+export async function bulkDeleteCardTxns(ids: string[]): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true };
+  const db = createAdminClient();
+  const { error } = await db.from("card_transactions").delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/cards");
+  return { ok: true };
+}
+
 export interface CardBulkResult {
   ok: boolean;
   error?: string;

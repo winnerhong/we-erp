@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Field, TextInput, SelectInput } from "@/components/ui";
+import { SearchableSelect } from "@/components/searchable-select";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
 import { BankTradeTabs } from "@/components/bank-trade-tabs";
 import { OptionsManager } from "@/components/options-manager";
@@ -15,7 +16,7 @@ import {
   CARD_TEMPLATE_SAMPLE,
 } from "@/lib/card-import";
 import type { CardRow, CardTransactionRow, FieldOptionRow } from "@/lib/supabase/database.types";
-import { createCard, updateCard, deleteCard, addCardTxn, updateCardTxn, deleteCardTxn, bulkImportCardTxns } from "./actions";
+import { createCard, updateCard, deleteCard, addCardTxn, updateCardTxn, deleteCardTxn, bulkImportCardTxns, bulkUpdateCardTxns, bulkDeleteCardTxns } from "./actions";
 import { setTxnCardSettlement } from "@/app/(erp)/bank/actions";
 
 export interface SettleBankTxn {
@@ -55,6 +56,7 @@ export function CardsClient({
   partners,
   accountOptions,
   categoryOptions,
+  employees,
   bankAccounts,
   settledTxns,
   candidateTxns,
@@ -84,10 +86,17 @@ export function CardsClient({
 
   const compName = new Map(companyNames.map((c) => [c.id, c.name]));
   const pName = new Map(partners.map((p) => [p.id, p.name]));
+  const eName = new Map(employees.map((e) => [e.id, e.name]));
   const acctMap = new Map(accountOptions.map((a) => [a.id, a]));
   const catLabel = new Map(categoryOptions.map((c) => [c.value, c.label]));
   const card = cards.find((c) => c.id === selectedId) ?? null;
   const refresh = () => router.refresh();
+  const [rowFilter, setRowFilter] = useState<"all" | "no_partner" | "no_account">("all");
+  const noParty = (t: CardTransactionRow) => !t.partner_id && !t.employee_id;
+  const noAcct = (t: CardTransactionRow) => !t.account_id;
+  const visibleTxns = monthTxns.filter((t) =>
+    rowFilter === "no_partner" ? noParty(t) : rowFilter === "no_account" ? noAcct(t) : true
+  );
 
   const go = (params: { c?: string; m?: string }) => {
     const q = new URLSearchParams({
@@ -136,11 +145,6 @@ export function CardsClient({
   }
 
   const catOpts = [{ value: "", label: "미지정" }, ...categoryOptions.map((c) => ({ value: c.value, label: c.label }))];
-  const partnerOpts = [{ value: "", label: "-" }, ...partners.map((p) => ({ value: p.id, label: p.name }))];
-  const accountOpts = [
-    { value: "", label: "미지정" },
-    ...accountOptions.map((a) => ({ value: a.id, label: `${a.code} ${a.name}` })),
-  ];
 
   const gridCols: GridCol<CardTransactionRow>[] = [
     {
@@ -194,11 +198,11 @@ export function CardsClient({
     },
     {
       key: "partner_id",
-      label: "거래처",
-      width: 140,
-      edit: "select",
-      options: partnerOpts,
-      text: (t) => (t.partner_id ? pName.get(t.partner_id) ?? "" : ""),
+      label: "거래처·직원",
+      width: 150,
+      text: (t) =>
+        t.employee_id ? eName.get(t.employee_id) ?? "" : t.partner_id ? pName.get(t.partner_id) ?? "" : "",
+      render: (t) => <CardPartyCell txn={t} partners={partners} employees={employees} onChanged={refresh} />,
     },
     {
       key: "amount",
@@ -237,12 +241,11 @@ export function CardsClient({
       key: "account_id",
       label: "계정과목",
       width: 160,
-      edit: "select",
-      options: accountOpts,
       text: (t) => {
         const a = t.account_id ? acctMap.get(t.account_id) : undefined;
         return a ? `${a.code} ${a.name}` : "";
       },
+      render: (t) => <CardAccountCell txn={t} accounts={accountOptions} onChanged={refresh} />,
     },
     { key: "memo", label: "메모", width: 150, edit: "text", text: (t) => t.memo ?? "" },
     {
@@ -444,7 +447,27 @@ export function CardsClient({
             );
           })()}
 
-          <div className="mb-3 flex flex-wrap items-center justify-end gap-1.5">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {([
+                ["all", `전체 ${monthTxns.length}`],
+                ["no_partner", `거래처 미지정 ${monthTxns.filter(noParty).length}`],
+                ["no_account", `계정 미지정 ${monthTxns.filter(noAcct).length}`],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setRowFilter(key)}
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                    rowFilter === key
+                      ? "bg-neutral-900 text-white"
+                      : "border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
             <button
               onClick={() => setImportOpen(true)}
               title="카드 명세서 올리기 (자동 병합)"
@@ -472,18 +495,23 @@ export function CardsClient({
             >
               ＋ 사용 추가
             </button>
+            </div>
           </div>
 
           <p className="mb-1 text-xs text-neutral-400">셀 클릭=수정 · 헤더 드래그=순서 · 끝 드래그=너비 · 단위: 원</p>
           <ExcelGrid
             storageKey="card_grid1"
             columns={gridCols}
-            rows={monthTxns}
+            rows={visibleTxns}
             rowId={(t) => t.id}
             onEdit={onCellEdit}
-            accent={(t) => !t.account_id}
+            accent={(t) => noParty(t) || noAcct(t)}
             onAddRow={addRow}
             addLabel="+ 사용 추가 (빈 행)"
+            selectable
+            renderBulk={(ids, clear) => (
+              <CardBulkActions ids={ids} clear={clear} partners={partners} accounts={accountOptions} onChanged={refresh} />
+            )}
             empty={monthTxns.length === 0 ? `${month} 카드 사용내역이 없습니다. 올리거나 아래에서 추가하세요.` : "조건에 맞는 내역이 없습니다 👍"}
             searchPlaceholder="🔍 가맹점·거래처·금액 검색"
           />
@@ -671,6 +699,212 @@ function SettlementModal({
           <button onClick={onClose} className="rounded-lg bg-neutral-100 px-4 py-2 text-sm font-medium hover:bg-neutral-200">완료</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------- 거래처·직원 통합 인라인 지정(카드) ----------
+function CardPartyCell({
+  txn,
+  partners,
+  employees,
+  onChanged,
+}: {
+  txn: CardTransactionRow;
+  partners: { id: string; name: string }[];
+  employees: { id: string; name: string; company_id: string | null }[];
+  onChanged: () => void;
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [q, setQ] = useState("");
+  const [pending, startTransition] = useTransition();
+  const curEmp = txn.employee_id ? employees.find((e) => e.id === txn.employee_id) : undefined;
+  const curPartner = !curEmp && txn.partner_id ? partners.find((p) => p.id === txn.partner_id) : undefined;
+  const MENU_W = 240;
+  const ql = q.trim().toLowerCase();
+  const fPartners = ql ? partners.filter((p) => p.name.toLowerCase().includes(ql)) : partners;
+  const fEmployees = ql ? employees.filter((e) => e.name.toLowerCase().includes(ql)) : employees;
+  function open() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: Math.min(r.left, window.innerWidth - MENU_W - 8) });
+    setQ("");
+  }
+  const close = () => setPos(null);
+  const pickPartner = (id: string) => startTransition(async () => { await updateCardTxn(txn.id, { partner_id: id, employee_id: null }); close(); onChanged(); });
+  const pickEmployee = (id: string) => startTransition(async () => { await updateCardTxn(txn.id, { employee_id: id, partner_id: null }); close(); onChanged(); });
+  const clearAll = () => startTransition(async () => { await updateCardTxn(txn.id, { partner_id: null, employee_id: null }); close(); onChanged(); });
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={() => (pos ? close() : open())}
+        disabled={pending}
+        className={`mt-0.5 flex max-w-[170px] items-center gap-1 rounded-lg px-2 py-0.5 text-left text-xs ${
+          curEmp ? "font-medium text-violet-700 hover:bg-violet-50" : curPartner ? "font-medium text-neutral-700 hover:bg-neutral-100" : "text-neutral-400 hover:bg-neutral-100"
+        }`}
+      >
+        {curEmp && <span className="text-neutral-300">💼</span>}
+        <span className="truncate">{curEmp ? curEmp.name : curPartner ? curPartner.name : "거래처·직원"}</span>
+        <span className="text-[10px] text-neutral-300">▾</span>
+      </button>
+      {pos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={close} />
+          <div className="fixed z-50 rounded-lg border border-neutral-200 bg-white p-1 shadow-xl" style={{ top: pos.top, left: pos.left, width: MENU_W }}>
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="거래처·직원 검색…" className="mb-1 w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm" />
+            <div className="max-h-56 overflow-y-auto">
+              {fPartners.length > 0 && (
+                <>
+                  <p className="px-2 pb-0.5 pt-1 text-[10px] font-semibold text-neutral-400">거래처</p>
+                  {fPartners.map((p) => (
+                    <button key={p.id} onClick={() => pickPartner(p.id)} disabled={pending} className={`block w-full rounded-md px-3 py-1.5 text-left text-sm hover:bg-neutral-100 ${p.id === txn.partner_id ? "font-semibold text-indigo-600" : ""}`}>{p.name}</button>
+                  ))}
+                </>
+              )}
+              {fEmployees.length > 0 && (
+                <>
+                  <p className="px-2 pb-0.5 pt-1.5 text-[10px] font-semibold text-neutral-400">직원</p>
+                  {fEmployees.map((e) => (
+                    <button key={e.id} onClick={() => pickEmployee(e.id)} disabled={pending} className={`block w-full rounded-md px-3 py-1.5 text-left text-sm hover:bg-neutral-100 ${e.id === txn.employee_id ? "font-semibold text-violet-700" : ""}`}>💼 {e.name}</button>
+                  ))}
+                </>
+              )}
+              {fPartners.length === 0 && fEmployees.length === 0 && <p className="px-3 py-3 text-center text-xs text-neutral-400">검색 결과가 없습니다</p>}
+            </div>
+            {(curEmp || curPartner) && (
+              <>
+                <div className="my-1 border-t border-neutral-100" />
+                <button onClick={clearAll} disabled={pending} className="block w-full rounded-md px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">연결 해제</button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ---------- 계정과목 인라인 지정(카드) ----------
+function CardAccountCell({
+  txn,
+  accounts,
+  onChanged,
+}: {
+  txn: CardTransactionRow;
+  accounts: { id: string; code: string; name: string }[];
+  onChanged: () => void;
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [q, setQ] = useState("");
+  const [pending, startTransition] = useTransition();
+  const current = accounts.find((a) => a.id === txn.account_id);
+  const MENU_W = 260;
+  const ql = q.trim().toLowerCase();
+  const filtered = ql ? accounts.filter((a) => `${a.code} ${a.name}`.toLowerCase().includes(ql)) : accounts;
+  function open() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 6, left: Math.min(r.left, window.innerWidth - MENU_W - 8) });
+    setQ("");
+  }
+  const close = () => setPos(null);
+  const pick = (id: string | null) => startTransition(async () => { await updateCardTxn(txn.id, { account_id: id }); close(); onChanged(); });
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={() => (pos ? close() : open())}
+        disabled={pending}
+        className={`mt-0.5 flex max-w-[180px] items-center gap-1 rounded-lg px-2 py-0.5 text-left text-xs ${current ? "font-medium text-neutral-700 hover:bg-neutral-100" : "text-neutral-400 hover:bg-neutral-100"}`}
+      >
+        <span className="truncate">{current ? `${current.code} ${current.name}` : "계정과목"}</span>
+        <span className="text-[10px] text-neutral-300">▾</span>
+      </button>
+      {pos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={close} />
+          <div className="fixed z-50 rounded-lg border border-neutral-200 bg-white p-1 shadow-xl" style={{ top: pos.top, left: pos.left, width: MENU_W }}>
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="계정과목 검색…" className="mb-1 w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm" />
+            <div className="max-h-56 overflow-y-auto">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-3 text-center text-xs text-neutral-400">계정과목이 없습니다</p>
+              ) : (
+                filtered.map((a) => (
+                  <button key={a.id} onClick={() => pick(a.id)} disabled={pending} className={`block w-full rounded-md px-3 py-1.5 text-left text-sm hover:bg-neutral-100 ${a.id === txn.account_id ? "font-semibold text-indigo-600" : ""}`}>
+                    <span className="text-neutral-400">{a.code}</span> {a.name}
+                  </button>
+                ))
+              )}
+            </div>
+            {current && (
+              <>
+                <div className="my-1 border-t border-neutral-100" />
+                <button onClick={() => pick(null)} disabled={pending} className="block w-full rounded-md px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50">연결 해제</button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ---------- 선택 행 일괄작업(카드) ----------
+function CardBulkActions({
+  ids,
+  clear,
+  partners,
+  accounts,
+  onChanged,
+}: {
+  ids: string[];
+  clear: () => void;
+  partners: { id: string; name: string }[];
+  accounts: { id: string; code: string; name: string }[];
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const run = (patch: Partial<CardTransactionRow>) =>
+    startTransition(async () => {
+      await bulkUpdateCardTxns(ids, patch);
+      clear();
+      onChanged();
+    });
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="w-44">
+        <SearchableSelect
+          value=""
+          onChange={(v) => run({ partner_id: v || null, employee_id: null })}
+          options={partners.map((p) => ({ value: p.id, label: p.name }))}
+          placeholder="거래처 일괄지정"
+        />
+      </div>
+      <div className="w-48">
+        <SearchableSelect
+          value=""
+          onChange={(v) => run({ account_id: v || null })}
+          options={accounts.map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))}
+          placeholder="계정 일괄지정"
+        />
+      </div>
+      <button
+        onClick={() => {
+          if (confirm(`${ids.length}건을 삭제할까요?`))
+            startTransition(async () => {
+              await bulkDeleteCardTxns(ids);
+              clear();
+              onChanged();
+            });
+        }}
+        disabled={pending}
+        className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100"
+      >
+        🗑 삭제
+      </button>
     </div>
   );
 }
