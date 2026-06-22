@@ -45,25 +45,46 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 등급별 메뉴 접근 하드 차단 (대시보드 '/'·관리자는 통과, /admin 은 페이지 자체 가드)
-  if (user && !isLogin && path !== "/" && !path.startsWith("/admin")) {
+  // 직원 셀프 서비스(/me)는 누구나(로그인) 접근 — 본인 데이터만 보임
+  const isMe = path === "/me" || path.startsWith("/me/");
+
+  if (user && !isLogin && !isMe) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const role = (profile as { role: string } | null)?.role;
     const menu = MENUS.find((m) => m.href !== "/" && (path === m.href || path.startsWith(m.href + "/")));
-    if (menu) {
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
-      const role = (profile as { role: string } | null)?.role;
-      if (role && role !== "ADMIN") {
+
+    // 직원(EMPLOYEE): 기본 전부 차단 → /me 로. 관리자가 권한관리에서 allowed=true 로 연 메뉴만 통과.
+    if (role === "EMPLOYEE") {
+      let allowed = false;
+      if (menu) {
         const { data: perm } = await supabase
           .from("role_menu_permissions")
           .select("allowed")
           .eq("role", role)
           .eq("menu_key", menu.href)
           .maybeSingle();
-        if (perm && (perm as { allowed: boolean }).allowed === false) {
-          const url = request.nextUrl.clone();
-          url.pathname = "/";
-          url.search = "";
-          return NextResponse.redirect(url);
-        }
+        allowed = (perm as { allowed: boolean } | null)?.allowed === true;
+      }
+      if (!allowed) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/me";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+    }
+    // 그 외 비-ADMIN 등급: 메뉴별 allowed=false 만 차단 (대시보드'/'·/admin 은 통과)
+    else if (path !== "/" && !path.startsWith("/admin") && menu && role && role !== "ADMIN") {
+      const { data: perm } = await supabase
+        .from("role_menu_permissions")
+        .select("allowed")
+        .eq("role", role)
+        .eq("menu_key", menu.href)
+        .maybeSingle();
+      if (perm && (perm as { allowed: boolean }).allowed === false) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/";
+        url.search = "";
+        return NextResponse.redirect(url);
       }
     }
   }
