@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getImportCtx } from "@/lib/queries";
 import { getCompanyContext, companyFilter } from "@/lib/active-company";
 import { PartnersClient, type LedgerEntry } from "./partners-client";
-import type { PartnerRow, FieldOptionRow } from "@/lib/supabase/database.types";
+import { toPaybackBrief, type PaybackBrief } from "@/components/payback-list";
+import type { PartnerRow, FieldOptionRow, PaybackRow } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "거래처" };
 
@@ -33,6 +34,7 @@ export default async function PartnersPage({
 
   // 선택 거래처의 거래원장(통장·계산서·영수증·구매) — 선택된 것만 로드
   let entries: LedgerEntry[] = [];
+  let paybacks: PaybackBrief[] = [];
   let receivable = 0;
   let payable = 0;
   if (selectedId) {
@@ -111,6 +113,28 @@ export default async function PartnersPage({
         note: p.product_name ?? "",
       })),
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+    // 페이백 — 이 거래처가 받는(또는 받을) 페이백
+    const { data: pb } = await supabase
+      .from("paybacks")
+      .select("*")
+      .eq("partner_id", selectedId)
+      .order("created_at", { ascending: false });
+    const pbRows = (pb ?? []) as PaybackRow[];
+    const pbTxnIds = [...new Set(pbRows.map((p) => p.bank_transaction_id).filter((v): v is string => !!v))];
+    const pbDate = new Map<string, string>();
+    const pbDesc = new Map<string, string>();
+    if (pbTxnIds.length > 0) {
+      const { data: t } = await supabase
+        .from("bank_transactions")
+        .select("id, txn_date, description")
+        .in("id", pbTxnIds);
+      for (const r of (t ?? []) as { id: string; txn_date: string; description: string | null }[]) {
+        pbDate.set(r.id, r.txn_date);
+        pbDesc.set(r.id, r.description ?? "");
+      }
+    }
+    paybacks = pbRows.map((p) => toPaybackBrief(p, pbDate, pbDesc));
   }
 
   return (
@@ -120,6 +144,7 @@ export default async function PartnersPage({
       options={(opts ?? []) as FieldOptionRow[]}
       selectedId={selectedId}
       entries={entries}
+      paybacks={paybacks}
       receivable={receivable}
       payable={payable}
     />

@@ -169,6 +169,28 @@ export async function setTxnPartner(txnId: string, partnerId: string | null): Pr
   return { ok: true };
 }
 
+/** 통장 출금을 카드대금 정산으로 연결/해제(카드 + 사용월). cardId=null 이면 해제. */
+export async function setTxnCardSettlement(
+  txnId: string,
+  cardId: string | null,
+  settlesMonth: string | null
+): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { error } = await db
+    .from("bank_transactions")
+    .update({
+      settles_card_id: cardId,
+      settles_month: cardId ? settlesMonth : null,
+    } as never)
+    .eq("id", txnId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/bank");
+  revalidatePath("/cards");
+  return { ok: true };
+}
+
 // 통장→급여 자동연동 표시(이 메모가 붙은 급여만 자동 삭제 대상)
 const AUTO_PAYROLL_MEMO = "통장 자동연동";
 

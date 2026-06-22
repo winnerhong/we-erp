@@ -7,6 +7,7 @@ import { InlineSelect } from "@/components/inline-select";
 import { OptionsManager } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
+import { PaybackList, type PaybackBrief } from "@/components/payback-list";
 import { Field, TextInput, SelectInput, Badge, FormSection } from "@/components/ui";
 import { krw, LEAVE_TYPE_LABEL, LEAVE_STATUS_LABEL } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
@@ -137,7 +138,7 @@ function TeacherSyncControls() {
   );
 }
 
-type TabKey = "info" | "work" | "pay" | "leave" | "docs" | "history";
+type TabKey = "info" | "work" | "pay" | "payback" | "leave" | "docs" | "history";
 
 export function EmployeesClient({
   rows,
@@ -151,6 +152,7 @@ export function EmployeesClient({
   contractsByEmp,
   docsByEmp,
   eventsByEmp,
+  paybacksByEmp,
   initialSelectedId,
   initialTab,
 }: {
@@ -165,6 +167,7 @@ export function EmployeesClient({
   contractsByEmp: Record<string, LaborContractRow[]>;
   docsByEmp: Record<string, EmployeeDocumentRow[]>;
   eventsByEmp: Record<string, EmployeeEventRow[]>;
+  paybacksByEmp: Record<string, PaybackBrief[]>;
   initialSelectedId?: string | null;
   initialTab?: string | null;
 }) {
@@ -175,7 +178,7 @@ export function EmployeesClient({
   const [acctFor, setAcctFor] = useState<EmployeeRow | null>(null);
   const [editFor, setEditFor] = useState<EmployeeRow | null>(null);
   const [search, setSearch] = useState("");
-  const TAB_KEYS: TabKey[] = ["info", "work", "pay", "leave", "docs", "history"];
+  const TAB_KEYS: TabKey[] = ["info", "work", "pay", "payback", "leave", "docs", "history"];
   const [tab, setTab] = useState<TabKey>(
     initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as TabKey) : "info"
   );
@@ -390,6 +393,7 @@ export function EmployeesClient({
                 ["info", "🧾 기본정보·계좌"],
                 ["work", "📋 근로조건·4대보험"],
                 ["pay", "💰 급여·퇴직정산"],
+                ["payback", "⭐ 포인트"],
                 ["leave", "🌴 휴가·연차"],
                 ["docs", "📄 서류·계약"],
                 ["history", "📌 인사이력·메모"],
@@ -431,6 +435,9 @@ export function EmployeesClient({
                 payrolls={payrollsByEmp[selected.id] ?? []}
                 leaves={leavesByEmp[selected.id] ?? []}
               />
+            )}
+            {tab === "payback" && (
+              <PaybackList rows={paybacksByEmp[selected.id] ?? []} title="⭐ 포인트" term="포인트" />
             )}
             {tab === "leave" && (
               <LeaveTab emp={selected} leaves={leavesByEmp[selected.id] ?? []} onChanged={refresh} />

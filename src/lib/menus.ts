@@ -18,6 +18,7 @@ export const MENUS: MenuItem[] = [
   { href: "/receipts", label: "영수증 OCR", icon: "🧾" },
   { href: "/tax-invoices", label: "세금계산서", icon: "📑" },
   { href: "/bank", label: "통장원장", icon: "🏦" },
+  { href: "/cards", label: "카드원장", icon: "💳" },
   { href: "/paybacks", label: "페이백", icon: "💸" },
   { href: "/purchases", label: "구매 요청", icon: "🛒" },
   { href: "/hr", label: "급여·인사", icon: "💰" },

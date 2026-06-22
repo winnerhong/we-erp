@@ -316,6 +316,8 @@ export function ExcelGrid<T>({
             {visibleCols.map((c) => (
               <col key={c.key} style={{ width: widths[c.key] ?? c.width ?? DEFAULT_W }} />
             ))}
+            {/* 우측 여백 흡수용 스페이서 — 실제 컬럼이 정확한 폭을 유지하고 리사이즈되도록 */}
+            <col />
           </colgroup>
           <thead>
             <tr className="text-xs text-neutral-600">
@@ -366,6 +368,7 @@ export function ExcelGrid<T>({
                   />
                 </th>
               ))}
+              <th className="sticky top-0 z-20 bg-neutral-50 shadow-[inset_0_-1px_0_#e5e7eb]" />
             </tr>
             {filterOpen && (
               <tr className="text-neutral-600">
@@ -395,13 +398,14 @@ export function ExcelGrid<T>({
                     ) : null}
                   </th>
                 ))}
+                <th className="sticky top-[37px] z-20 bg-white shadow-[inset_0_-1px_0_#e5e7eb]" />
               </tr>
             )}
           </thead>
           <tbody className="divide-y divide-neutral-100">
             {view.length === 0 ? (
               <tr>
-                <td colSpan={visibleCols.length + 1} className="px-4 py-12 text-center text-sm text-neutral-400">
+                <td colSpan={visibleCols.length + 2} className="px-4 py-12 text-center text-sm text-neutral-400">
                   {empty ?? "데이터가 없습니다"}
                 </td>
               </tr>
@@ -477,6 +481,7 @@ export function ExcelGrid<T>({
                         </td>
                       );
                     })}
+                    <td className="border-neutral-100" />
                   </tr>
                 );
               })
@@ -485,7 +490,7 @@ export function ExcelGrid<T>({
           {onAddRow && (
             <tfoot>
               <tr>
-                <td colSpan={visibleCols.length + 1} className="p-0">
+                <td colSpan={visibleCols.length + 2} className="p-0">
                   <button
                     onClick={onAddRow}
                     className="w-full border-t border-dashed border-neutral-300 py-2.5 text-sm font-medium text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800"

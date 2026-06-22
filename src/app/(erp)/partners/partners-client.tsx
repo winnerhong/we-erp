@@ -6,6 +6,7 @@ import { InlineSelect } from "@/components/inline-select";
 import { OptionsManager } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
+import { PaybackList, type PaybackBrief } from "@/components/payback-list";
 import { Card, Field, TextInput, SelectInput, Badge, EmptyState, FormSection } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
@@ -120,6 +121,7 @@ export function PartnersClient({
   options,
   selectedId,
   entries,
+  paybacks,
   receivable,
   payable,
 }: {
@@ -128,6 +130,7 @@ export function PartnersClient({
   options: FieldOptionRow[];
   selectedId: string | null;
   entries: LedgerEntry[];
+  paybacks: PaybackBrief[];
   receivable: number;
   payable: number;
 }) {
@@ -138,7 +141,7 @@ export function PartnersClient({
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("ALL");
-  const [tab, setTab] = useState<"info" | "ledger">("info");
+  const [tab, setTab] = useState<"info" | "ledger" | "payback">("info");
   const [ledgerFilter, setLedgerFilter] = useState<"ALL" | LedgerEntry["source"]>("ALL");
   const [view, setView] = useState<"card" | "grid">("card");
 
@@ -256,6 +259,13 @@ export function PartnersClient({
                   {t.label}
                 </button>
               ))}
+              <button
+                onClick={() => setMgrOpen(true)}
+                title="거래처 유형 추가·수정·삭제"
+                className="rounded-full border border-dashed border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-50"
+              >
+                + 유형
+              </button>
             </div>
           </div>
           <div className="max-h-[68vh] divide-y divide-neutral-100 overflow-y-auto">
@@ -344,6 +354,7 @@ export function PartnersClient({
               {([
                 ["info", "🧾 기본정보"],
                 ["ledger", `📒 거래원장 ${entries.length}`],
+                ["payback", `💸 페이백 ${paybacks.length}`],
               ] as const).map(([k, label]) => (
                 <button
                   key={k}
@@ -402,6 +413,8 @@ export function PartnersClient({
                   <Row label="메모">{selected.memo || "-"}</Row>
                 </dl>
               </section>
+            ) : tab === "payback" ? (
+              <PaybackList rows={paybacks} />
             ) : (
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
@@ -483,7 +496,7 @@ export function PartnersClient({
       {mgrOpen && (
         <OptionsManager
           options={options}
-          cats={[{ key: "partner_category", title: "거래처 구분", hint: "협력사·기관·장소 등" }]}
+          cats={[{ key: "partner_category", title: "거래처 유형", hint: "협력사·기관·장소 등 — 추가·이름변경·색상·순서·삭제" }]}
           onClose={() => {
             setMgrOpen(false);
             router.refresh();

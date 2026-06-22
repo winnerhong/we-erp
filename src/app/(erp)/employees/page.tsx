@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getImportCtx } from "@/lib/queries";
 import { getCompanyContext, companyFilter } from "@/lib/active-company";
 import { EmployeesClient, type AccountInfo } from "./employees-client";
+import { toPaybackBrief, type PaybackBrief } from "@/components/payback-list";
 import type {
   EmployeeRow,
   FieldOptionRow,
@@ -12,6 +13,7 @@ import type {
   LaborContractRow,
   EmployeeDocumentRow,
   EmployeeEventRow,
+  PaybackRow,
 } from "@/lib/supabase/database.types";
 
 function groupBy<T extends { employee_id: string | null }>(rows: T[]): Record<string, T[]> {
@@ -64,6 +66,7 @@ export default async function EmployeesPage({
   let contractsByEmp: Record<string, LaborContractRow[]> = {};
   let docsByEmp: Record<string, EmployeeDocumentRow[]> = {};
   let eventsByEmp: Record<string, EmployeeEventRow[]> = {};
+  const paybacksByEmp: Record<string, PaybackBrief[]> = {};
   if (empIds.length > 0) {
     const [{ data: pays }, { data: leaves }, { data: certs }, { data: contracts }, { data: docs }, { data: events }] =
       await Promise.all([
@@ -84,6 +87,31 @@ export default async function EmployeesPage({
     contractsByEmp = groupBy((contracts ?? []) as LaborContractRow[]);
     docsByEmp = groupBy((docs ?? []) as EmployeeDocumentRow[]);
     eventsByEmp = groupBy((events ?? []) as EmployeeEventRow[]);
+
+    // 페이백 — 직원이 받는(또는 받을) 페이백. 출처 거래일·적요는 통장거래에서 보강.
+    const { data: pb } = await supabase
+      .from("paybacks")
+      .select("*")
+      .in("employee_id", empIds)
+      .order("created_at", { ascending: false });
+    const pbRows = (pb ?? []) as PaybackRow[];
+    const pbTxnIds = [...new Set(pbRows.map((p) => p.bank_transaction_id).filter((v): v is string => !!v))];
+    const pbDate = new Map<string, string>();
+    const pbDesc = new Map<string, string>();
+    if (pbTxnIds.length > 0) {
+      const { data: t } = await supabase
+        .from("bank_transactions")
+        .select("id, txn_date, description")
+        .in("id", pbTxnIds);
+      for (const r of (t ?? []) as { id: string; txn_date: string; description: string | null }[]) {
+        pbDate.set(r.id, r.txn_date);
+        pbDesc.set(r.id, r.description ?? "");
+      }
+    }
+    for (const p of pbRows) {
+      if (!p.employee_id) continue;
+      (paybacksByEmp[p.employee_id] ??= []).push(toPaybackBrief(p, pbDate, pbDesc));
+    }
   }
 
   // 연결된 로그인 계정(profiles) 조회 → 직원ID별 계정정보 맵
@@ -114,6 +142,7 @@ export default async function EmployeesPage({
       contractsByEmp={contractsByEmp}
       docsByEmp={docsByEmp}
       eventsByEmp={eventsByEmp}
+      paybacksByEmp={paybacksByEmp}
       initialSelectedId={initialSelectedId}
       initialTab={sp.tab ?? null}
     />

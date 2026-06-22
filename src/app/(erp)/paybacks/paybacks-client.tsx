@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { krw } from "@/lib/labels";
+import { krw, PAYBACK_STATUS_LABEL } from "@/lib/labels";
 import { downloadXlsx } from "@/lib/sheet";
 import type { PaybackRow } from "@/lib/supabase/database.types";
 import { payPayback, unpayPayback, deletePayback } from "@/app/(erp)/bank/actions";
@@ -113,8 +113,8 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
         <>
       {/* 요약 카드 (현재 필터 기준) */}
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Card label="지급예정" value={krw(sumNet(pendingRows))} sub={`${pendingRows.length}건 · 총 ${krw(sumGross(pendingRows))}`} tone="amber" />
-        <Card label="지급완료" value={krw(sumNet(paidRows))} sub={`${paidRows.length}건 · 총 ${krw(sumGross(paidRows))}`} tone="emerald" />
+        <Card label="요청받음" value={krw(sumNet(pendingRows))} sub={`${pendingRows.length}건 · 총 ${krw(sumGross(pendingRows))}`} tone="amber" />
+        <Card label="지불완료" value={krw(sumNet(paidRows))} sub={`${paidRows.length}건 · 총 ${krw(sumGross(paidRows))}`} tone="emerald" />
         <Card label="원천징수세액" value={krw(sumTax(scopeRows))} sub="원천세 신고 참고" tone="rose" />
         <Card label="페이백 총액" value={krw(sumGross(scopeRows))} sub={`${scopeRows.length}건`} tone="neutral" />
       </div>
@@ -154,8 +154,8 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
       <div className="mb-3 flex gap-1 border-b border-neutral-200">
         {([
           ["ALL", `전체 ${scopeRows.length}`],
-          ["PENDING", `예정 ${pendingRows.length}`],
-          ["PAID", `완료 ${paidRows.length}`],
+          ["PENDING", `요청받음 ${pendingRows.length}`],
+          ["PAID", `지불완료 ${paidRows.length}`],
         ] as const).map(([k, label]) => (
           <button
             key={k}
@@ -203,7 +203,7 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
                       <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">{g.type}</span>
                       <span className="ml-2 font-medium">{g.name}</span>
                       {g.pending > 0 && (
-                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">예정 {g.pending}</span>
+                        <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">요청받음 {g.pending}</span>
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right tabular">{g.count}</td>
@@ -270,10 +270,10 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
                   <td className="px-3 py-2 text-center">
                     {p.status === "PAID" ? (
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
-                        완료 {p.paid_at ?? ""}
+                        {PAYBACK_STATUS_LABEL.PAID} {p.paid_at ?? ""}
                       </span>
                     ) : (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">예정</span>
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">{PAYBACK_STATUS_LABEL.PENDING}</span>
                     )}
                   </td>
                   <td className="px-4 py-2">
@@ -284,18 +284,18 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
                           disabled={pending}
                           className="rounded-md border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-50"
                         >
-                          지급취소
+                          지불취소
                         </button>
                       ) : (
                         <button
                           onClick={() => {
-                            if (confirm(`${p.recipientName} 에게 ${krw(p.net_amount)} 지급 처리할까요?\n통장에 출금거래가 자동 생성됩니다.`))
+                            if (confirm(`${p.recipientName} 에게 ${krw(p.net_amount)} 지불 처리할까요?\n통장에 출금거래가 자동 생성됩니다.`))
                               act(() => payPayback(p.id));
                           }}
                           disabled={pending}
                           className="rounded-md bg-neutral-900 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-neutral-700"
                         >
-                          지급완료
+                          지불완료
                         </button>
                       )}
                       <button
@@ -383,7 +383,7 @@ function ReportView({ rows }: { rows: PaybackView[] }) {
   if (months.length === 0) {
     return (
       <div className="rounded-xl border border-neutral-200 bg-white px-4 py-12 text-center text-sm text-neutral-400">
-        지급완료된 페이백이 없습니다. 페이백을 ‘지급완료’ 처리하면 원천세 신고자료가 집계됩니다.
+        지불완료된 페이백이 없습니다. 페이백을 ‘지불완료’ 처리하면 원천세 신고자료가 집계됩니다.
       </div>
     );
   }

@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 
-/** 통장원장 ↔ 매입·매출을 하나로 묶는 상단 탭. */
-export function BankTradeTabs({ active }: { active: "bank" | "trade" }) {
+/** 통장원장 ↔ 카드 ↔ 매입·매출을 하나로 묶는 상단 탭. */
+export function BankTradeTabs({ active }: { active: "bank" | "card" | "trade" }) {
   const tabs = [
     { key: "bank", href: "/bank", label: "🏦 통장 거래내역" },
+    { key: "card", href: "/cards", label: "💳 카드 사용내역" },
     { key: "trade", href: "/trade", label: "📈 매입·매출 / 부가세" },
   ] as const;
   return (

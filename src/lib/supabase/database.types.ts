@@ -310,6 +310,8 @@ export interface BankTransactionRow extends Timestamps {
   category: string | null; // 사용자 정의 구분(field_options 'bank_category')
   employee_id: string | null; // 직원 연동(employees.id) — 구분이 '직원' 연동일 때
   payroll_id: string | null; // 자동 생성/연결된 급여(payrolls.id)
+  settles_card_id: string | null; // 카드대금 정산: 이 출금이 결제하는 카드(cards.id)
+  settles_month: string | null; // 카드대금 정산: 대상 카드 사용월 'YYYY-MM'
 }
 
 export interface PaybackRow {
@@ -329,6 +331,41 @@ export interface PaybackRow {
   memo: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CardRow extends Timestamps {
+  id: string;
+  company_id: string;
+  card_company: string | null;
+  alias: string;
+  card_no_last4: string | null;
+  card_type: "CREDIT" | "CHECK";
+  settlement_bank_account_id: string | null;
+  billing_day: number | null;
+  is_active: boolean;
+}
+
+export interface CardTransactionRow extends Timestamps {
+  id: string;
+  card_id: string;
+  company_id: string;
+  txn_date: string;
+  txn_time: string | null;
+  counterparty: string | null; // 가맹점
+  description: string | null;
+  direction: BankDirection; // OUT=사용 / IN=취소·환불
+  amount: number;
+  installment_months: number; // 0=일시불
+  approval_no: string | null;
+  memo: string | null;
+  source_ref: string | null;
+  tax_status: string | null;
+  tax_invoice_id: string | null;
+  receipt_id: string | null;
+  partner_id: string | null;
+  account_id: string | null;
+  category: string | null; // field_options 'bank_category' 공유
+  employee_id: string | null;
 }
 
 export interface RoleMenuPermissionRow {
@@ -395,6 +432,11 @@ export interface Database {
       bank_transactions: TableShape<
         BankTransactionRow,
         "bank_account_id" | "company_id" | "txn_date" | "direction"
+      >;
+      cards: TableShape<CardRow, "company_id" | "alias">;
+      card_transactions: TableShape<
+        CardTransactionRow,
+        "card_id" | "company_id" | "txn_date"
       >;
     };
     Views: Record<string, never>;

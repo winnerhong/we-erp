@@ -129,6 +129,12 @@ export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {
   REJECTED: "반려",
 };
 
+/** 페이백 상태 라벨. PENDING=요청받음 / PAID=지불완료. */
+export const PAYBACK_STATUS_LABEL: Record<string, string> = {
+  PENDING: "요청받음",
+  PAID: "지불완료",
+};
+
 /** 연차 잔여에서 차감되는 휴가종류(연차·반차만). */
 export function deductsAnnual(t: LeaveType): boolean {
   return t === "ANNUAL" || t === "HALF_DAY";

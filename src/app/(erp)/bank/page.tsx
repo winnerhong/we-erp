@@ -138,6 +138,14 @@ export default async function BankPage({
   const { data: empData } = await empQuery;
   const employees = (empData ?? []) as { id: string; name: string; company_id: string | null }[];
 
+  // 카드 목록(통장 출금이 어느 카드의 대금 정산인지 배지 표시용)
+  let cardQ = supabase.from("cards").select("id, alias");
+  if (filter) cardQ = cardQ.eq("company_id", filter);
+  const { data: cardData } = await cardQ;
+  const cardAlias: Record<string, string> = Object.fromEntries(
+    ((cardData ?? []) as { id: string; alias: string }[]).map((c) => [c.id, c.alias])
+  );
+
   // 영수증 증빙 연결 후보(확정된 영수증)
   let receiptQuery = supabase
     .from("receipts")
@@ -302,6 +310,7 @@ export default async function BankPage({
       categoryOptions={categoryOptions}
       employees={employees}
       paybacksByTxn={paybacksByTxn}
+      cardAlias={cardAlias}
     />
   );
 }

@@ -30,7 +30,6 @@ import {
   unlinkTxnTaxInvoice,
   linkBankReceipt,
   setTxnPartner,
-  setTxnTaxPartner,
   setTxnAccount,
   setTxnCategory,
   setTxnEmployee,
@@ -111,6 +110,7 @@ interface Props {
   categoryOptions: FieldOptionRow[];
   employees: { id: string; name: string; company_id: string | null }[];
   paybacksByTxn: Record<string, PaybackRow[]>;
+  cardAlias: Record<string, string>;
 }
 
 // 원천징수율 프리셋(직접입력 항상 가능)
@@ -164,6 +164,7 @@ export function BankClient({
   categoryOptions,
   employees,
   paybacksByTxn,
+  cardAlias,
 }: Props) {
   const router = useRouter();
   const [optsOpen, setOptsOpen] = useState(false);
@@ -200,9 +201,6 @@ export function BankClient({
   const acctMap = new Map(accountOptions.map((a) => [a.id, a]));
   const catLabel = new Map(categoryOptions.map((c) => [c.value, c.label]));
   const eName = new Map(employees.map((e) => [e.id, e.name]));
-  // 직원 연동으로 지정된 구분(값) 집합 → 해당 거래는 거래처 대신 직원 선택
-  const empCatSet = new Set(categoryOptions.filter((c) => c.link_type === "employee").map((c) => c.value));
-  const isEmpCat = (t: TxnWithBalance) => !!t.category && empCatSet.has(t.category);
   const refresh = () => router.refresh();
 
   // 셀 인라인 편집 커밋(컬럼 key별로 알맞은 액션 호출)
@@ -249,7 +247,7 @@ export function BankClient({
     });
   }
 
-  // 엑셀 그리드 컬럼 정의 — 통장 원본 형식(날짜·구분·내용·출금·입금·잔액) + 부가 컬럼
+  // 엑셀 그리드 컬럼 정의 — 통장 원본 형식(날짜·구분·내용·출금·입금) + 부가 컬럼
   const gridCols: GridCol<TxnWithBalance>[] = [
     {
       key: "txn_date",
@@ -334,32 +332,16 @@ export function BankClient({
         ),
     },
     {
-      key: "running_balance",
-      label: "잔액",
-      width: 130,
-      align: "right",
-      // 업로드한 통장 잔액(balance_after)이 있으면 그 값을, 없으면 계산 잔액을 사용
-      text: (t) => String(t.balance_after ?? t.running_balance),
-      render: (t) => <span className="tabular text-neutral-600">{krw(t.balance_after ?? t.running_balance)}</span>,
-    },
-    {
       key: "partner_id",
       label: "거래처·직원",
       width: 160,
       text: (t) =>
-        isEmpCat(t)
-          ? t.employee_id
-            ? eName.get(t.employee_id) ?? ""
-            : ""
+        t.employee_id
+          ? eName.get(t.employee_id) ?? ""
           : t.partner_id
             ? pName.get(t.partner_id) ?? ""
             : t.counterparty ?? "",
-      render: (t) =>
-        isEmpCat(t) ? (
-          <EmployeeCell txn={t} employees={employees} onChanged={refresh} />
-        ) : (
-          <PartnerCell txn={t} field="partner" partners={partners} onChanged={refresh} />
-        ),
+      render: (t) => <PartyCell txn={t} partners={partners} employees={employees} onChanged={refresh} />,
     },
     {
       key: "tax_status",
@@ -404,6 +386,24 @@ export function BankClient({
       render: (t) => (
         <PaybackChip paybacks={paybacksByTxn[t.id] ?? []} onClick={() => setPaybackModalTxn(t)} />
       ),
+    },
+    {
+      key: "settles_card_id",
+      label: "카드대금",
+      width: 120,
+      align: "center",
+      text: (t) => (t.settles_card_id ? `${cardAlias[t.settles_card_id] ?? "카드"} ${t.settles_month ?? ""}` : ""),
+      render: (t) =>
+        t.settles_card_id ? (
+          <span
+            className="inline-block rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700"
+            title="카드 사용내역과 정산 연결됨 (카드원장에서 관리)"
+          >
+            💳 {cardAlias[t.settles_card_id] ?? "카드"} {t.settles_month}
+          </span>
+        ) : (
+          <span className="text-neutral-300">·</span>
+        ),
     },
     { key: "memo", label: "메모", width: 150, edit: "text", text: (t) => t.memo ?? "" },
     {
@@ -477,32 +477,8 @@ export function BankClient({
   return (
     <div>
       <BankTradeTabs active="bank" />
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4">
         <h1 className="text-xl font-bold text-neutral-900">통장원장</h1>
-        {account && (
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => go({ m: shiftMonth(month, -1) })}
-              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-500 hover:bg-neutral-50"
-              aria-label="이전 달"
-            >
-              ‹
-            </button>
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => go({ m: e.target.value })}
-              className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-center text-sm font-medium"
-            />
-            <button
-              onClick={() => go({ m: shiftMonth(month, 1) })}
-              className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-neutral-500 hover:bg-neutral-50"
-              aria-label="다음 달"
-            >
-              ›
-            </button>
-          </div>
-        )}
       </div>
 
       {/* 통장 선택 칩 */}
@@ -561,9 +537,34 @@ export function BankClient({
         <>
           {/* 요약 — 한 줄 바 */}
           <Card className="mb-3 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 p-4">
-            <div className="flex items-baseline gap-3">
-              <span className="text-xs text-neutral-500">{month} 월말 잔액</span>
-              <span className="text-2xl font-bold tabular text-neutral-900">{krw(endBalance)}</span>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {/* 월 네비게이터 — 메인 위치 */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => go({ m: shiftMonth(month, -1) })}
+                  className="rounded-lg px-2 py-1.5 text-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+                  aria-label="이전 달"
+                >
+                  ‹
+                </button>
+                <input
+                  type="month"
+                  value={month}
+                  onChange={(e) => go({ m: e.target.value })}
+                  className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-center text-base font-semibold focus:border-neutral-400 focus:outline-none"
+                />
+                <button
+                  onClick={() => go({ m: shiftMonth(month, 1) })}
+                  className="rounded-lg px-2 py-1.5 text-lg text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+                  aria-label="다음 달"
+                >
+                  ›
+                </button>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-neutral-500">월말 잔액</span>
+                <span className="text-2xl font-bold tabular text-neutral-900">{krw(endBalance)}</span>
+              </div>
             </div>
             <div className="flex items-center gap-4 text-sm">
               <span className="text-emerald-600">입금 +{krw(inSum)}</span>
@@ -827,9 +828,9 @@ function PaybackChip({ paybacks, onClick }: { paybacks: PaybackRow[]; onClick: (
           ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
           : "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
       }`}
-      title={allPaid ? "지급완료" : "지급예정 포함"}
+      title={allPaid ? "지불완료" : "요청받음 포함"}
     >
-      {krw(gross)} {allPaid ? "✓" : `· ${paybacks.filter((p) => p.status === "PENDING").length}건 예정`}
+      {krw(gross)} {allPaid ? "✓" : `· ${paybacks.filter((p) => p.status === "PENDING").length}건 요청`}
     </button>
   );
 }
@@ -949,7 +950,7 @@ function PaybackModal({
                   {p.status === "PAID" ? (
                     <>
                       <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700">
-                        지급완료 {p.paid_at ?? ""}
+                        지불완료 {p.paid_at ?? ""}
                       </span>
                       <button
                         onClick={() => act(() => unpayPayback(p.id))}
@@ -962,13 +963,13 @@ function PaybackModal({
                   ) : (
                     <button
                       onClick={() => {
-                        if (confirm(`${recipientName(p)} 에게 ${krw(p.net_amount)} 지급 처리할까요?\n통장에 출금거래가 자동 생성됩니다.`))
+                        if (confirm(`${recipientName(p)} 에게 ${krw(p.net_amount)} 지불 처리할까요?\n통장에 출금거래가 자동 생성됩니다.`))
                           act(() => payPayback(p.id));
                       }}
                       disabled={pending}
                       className="rounded-md bg-neutral-900 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-neutral-700"
                     >
-                      지급완료
+                      지불완료
                     </button>
                   )}
                   <button
@@ -1259,38 +1260,33 @@ function AccountCell({
   );
 }
 
-// ---------- 거래처 / 보낸 곳 인라인 지정 ----------
-function PartnerCell({
+// ---------- 거래처·직원 통합 인라인 지정 ----------
+// 한 칸에서 거래처와 직원을 함께 검색·선택. 직원을 고르면(구분이 직원연동일 때) 그 달 급여로 자동 기록.
+function PartyCell({
   txn,
   partners,
+  employees,
   onChanged,
-  field = "partner",
 }: {
   txn: TxnWithBalance;
   partners: { id: string; name: string }[];
+  employees: { id: string; name: string; company_id: string | null }[];
   onChanged: () => void;
-  field?: "partner" | "tax_partner";
 }) {
-  const isTax = field === "tax_partner";
-  const currentId = isTax ? txn.tax_partner_id : txn.partner_id;
-  const placeholder = isTax ? "보낸 곳" : "거래처";
-
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [q, setQ] = useState("");
   const [pending, startTransition] = useTransition();
 
-  const current = partners.find((p) => p.id === currentId);
-  // 추천: 보낸곳은 거래처(partner) 우선, 없으면 적요 매칭. 거래처는 적요 매칭.
-  const suggestion = current
-    ? undefined
-    : (isTax && txn.partner_id ? partners.find((p) => p.id === txn.partner_id) : undefined) ??
-      autoMatchPartner(txn.counterparty, partners);
+  const curEmp = txn.employee_id ? employees.find((e) => e.id === txn.employee_id) : undefined;
+  const curPartner = !curEmp && txn.partner_id ? partners.find((p) => p.id === txn.partner_id) : undefined;
+  // 추천: 미지정일 때만 적요로 거래처 자동 매칭
+  const suggestion = curEmp || curPartner ? undefined : autoMatchPartner(txn.counterparty, partners);
   const MENU_W = 240;
 
-  const filtered = q.trim()
-    ? partners.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase()))
-    : partners;
+  const ql = q.trim().toLowerCase();
+  const fPartners = ql ? partners.filter((p) => p.name.toLowerCase().includes(ql)) : partners;
+  const fEmployees = ql ? employees.filter((e) => e.name.toLowerCase().includes(ql)) : employees;
 
   function open() {
     const r = btnRef.current?.getBoundingClientRect();
@@ -1300,9 +1296,29 @@ function PartnerCell({
   function close() {
     setPos(null);
   }
-  function pick(id: string | null) {
+  // 거래처 선택 → 직원 연결은 해제(둘 중 하나만 유지)
+  function pickPartner(id: string | null) {
     startTransition(async () => {
-      await (isTax ? setTxnTaxPartner(txn.id, id) : setTxnPartner(txn.id, id));
+      if (txn.employee_id) await setTxnEmployee(txn.id, null);
+      await setTxnPartner(txn.id, id);
+      close();
+      onChanged();
+    });
+  }
+  // 직원 선택 → 거래처 연결은 해제
+  function pickEmployee(id: string) {
+    startTransition(async () => {
+      if (txn.partner_id) await setTxnPartner(txn.id, null);
+      const res = await setTxnEmployee(txn.id, id);
+      if (!res.ok) alert(res.error);
+      close();
+      onChanged();
+    });
+  }
+  function clearAll() {
+    startTransition(async () => {
+      if (txn.employee_id) await setTxnEmployee(txn.id, null);
+      if (txn.partner_id) await setTxnPartner(txn.id, null);
       close();
       onChanged();
     });
@@ -1315,21 +1331,23 @@ function PartnerCell({
         onClick={() => (pos ? close() : open())}
         disabled={pending}
         className={`mt-0.5 flex max-w-[180px] items-center gap-1 rounded-lg px-2 py-0.5 text-left text-xs ${
-          current
-            ? isTax
-              ? "font-medium text-indigo-600 hover:bg-indigo-50"
-              : "font-medium text-neutral-700 hover:bg-neutral-100"
-            : "text-neutral-400 hover:bg-neutral-100"
+          curEmp
+            ? "font-medium text-violet-700 hover:bg-violet-50"
+            : curPartner
+              ? "font-medium text-neutral-700 hover:bg-neutral-100"
+              : "text-neutral-400 hover:bg-neutral-100"
         }`}
-        title={isTax ? "계산서 보낸 곳" : txn.counterparty || ""}
+        title={curEmp ? "연결 직원" : txn.counterparty || ""}
       >
-        {isTax && <span className="text-neutral-300">↗</span>}
-        {current ? (
-          <span className="truncate">{current.name}</span>
+        {curEmp && <span className="text-neutral-300">💼</span>}
+        {curEmp ? (
+          <span className="truncate">{curEmp.name}</span>
+        ) : curPartner ? (
+          <span className="truncate">{curPartner.name}</span>
         ) : suggestion ? (
           <span className="truncate text-amber-600">{suggestion.name}?</span>
         ) : (
-          <span className="truncate">{(!isTax && txn.counterparty) || placeholder}</span>
+          <span className="truncate">{txn.counterparty || "거래처·직원"}</span>
         )}
         <span className="text-[10px] text-neutral-300">▾</span>
       </button>
@@ -1344,12 +1362,12 @@ function PartnerCell({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder={`${placeholder} 검색…`}
+              placeholder="거래처·직원 검색…"
               className="mb-1 w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm"
             />
             {suggestion && !q && (
               <button
-                onClick={() => pick(suggestion.id)}
+                onClick={() => pickPartner(suggestion.id)}
                 disabled={pending}
                 className="block w-full rounded-md px-3 py-2 text-left text-sm text-amber-700 hover:bg-amber-50"
               >
@@ -1357,136 +1375,53 @@ function PartnerCell({
               </button>
             )}
             <div className="max-h-56 overflow-y-auto">
-              {filtered.length === 0 ? (
-                <p className="px-3 py-3 text-center text-xs text-neutral-400">거래처가 없습니다</p>
-              ) : (
-                filtered.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => pick(p.id)}
-                    disabled={pending}
-                    className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-neutral-100 ${
-                      p.id === currentId ? "font-semibold text-indigo-600" : ""
-                    }`}
-                  >
-                    {p.name}
-                  </button>
-                ))
+              {fPartners.length > 0 && (
+                <>
+                  <p className="px-2 pb-0.5 pt-1 text-[10px] font-semibold text-neutral-400">거래처</p>
+                  {fPartners.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => pickPartner(p.id)}
+                      disabled={pending}
+                      className={`block w-full rounded-md px-3 py-1.5 text-left text-sm hover:bg-neutral-100 ${
+                        p.id === txn.partner_id ? "font-semibold text-indigo-600" : ""
+                      }`}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </>
+              )}
+              {fEmployees.length > 0 && (
+                <>
+                  <p className="px-2 pb-0.5 pt-1.5 text-[10px] font-semibold text-neutral-400">직원</p>
+                  {fEmployees.map((e) => (
+                    <button
+                      key={e.id}
+                      onClick={() => pickEmployee(e.id)}
+                      disabled={pending}
+                      className={`block w-full rounded-md px-3 py-1.5 text-left text-sm hover:bg-neutral-100 ${
+                        e.id === txn.employee_id ? "font-semibold text-violet-700" : ""
+                      }`}
+                    >
+                      💼 {e.name}
+                    </button>
+                  ))}
+                </>
+              )}
+              {fPartners.length === 0 && fEmployees.length === 0 && (
+                <p className="px-3 py-3 text-center text-xs text-neutral-400">검색 결과가 없습니다</p>
               )}
             </div>
-            {current && (
+            {(curEmp || curPartner) && (
               <>
                 <div className="my-1 border-t border-neutral-100" />
                 <button
-                  onClick={() => pick(null)}
+                  onClick={clearAll}
                   disabled={pending}
                   className="block w-full rounded-md px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
                 >
-                  연결 해제
-                </button>
-              </>
-            )}
-          </div>
-        </>
-      )}
-    </>
-  );
-}
-
-// ---------- 직원 인라인 지정(구분=직원연동) — 선택 시 그 달 급여로 자동기록 ----------
-function EmployeeCell({
-  txn,
-  employees,
-  onChanged,
-}: {
-  txn: TxnWithBalance;
-  employees: { id: string; name: string; company_id: string | null }[];
-  onChanged: () => void;
-}) {
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const [q, setQ] = useState("");
-  const [pending, startTransition] = useTransition();
-
-  const current = employees.find((e) => e.id === txn.employee_id);
-  const MENU_W = 240;
-  const filtered = q.trim()
-    ? employees.filter((e) => e.name.toLowerCase().includes(q.trim().toLowerCase()))
-    : employees;
-
-  function open() {
-    const r = btnRef.current?.getBoundingClientRect();
-    if (r) setPos({ top: r.bottom + 6, left: Math.min(r.left, window.innerWidth - MENU_W - 8) });
-    setQ("");
-  }
-  function close() {
-    setPos(null);
-  }
-  function pick(id: string | null) {
-    startTransition(async () => {
-      const res = await setTxnEmployee(txn.id, id);
-      if (!res.ok) alert(res.error);
-      close();
-      onChanged();
-    });
-  }
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        onClick={() => (pos ? close() : open())}
-        disabled={pending}
-        className={`mt-0.5 flex max-w-[180px] items-center gap-1 rounded-lg px-2 py-0.5 text-left text-xs ${
-          current ? "font-medium text-violet-700 hover:bg-violet-50" : "text-neutral-400 hover:bg-neutral-100"
-        }`}
-        title="급여 직원 — 선택 시 그 달 급여로 자동 기록"
-      >
-        <span className="text-neutral-300">💼</span>
-        {current ? <span className="truncate">{current.name}</span> : <span className="truncate">직원 선택</span>}
-        <span className="text-[10px] text-neutral-300">▾</span>
-      </button>
-      {pos && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={close} />
-          <div
-            className="fixed z-50 rounded-lg border border-neutral-200 bg-white p-1 shadow-xl"
-            style={{ top: pos.top, left: pos.left, width: MENU_W }}
-          >
-            <input
-              autoFocus
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="직원 검색…"
-              className="mb-1 w-full rounded-md border border-neutral-200 px-2 py-1.5 text-sm"
-            />
-            <div className="max-h-56 overflow-y-auto">
-              {filtered.length === 0 ? (
-                <p className="px-3 py-3 text-center text-xs text-neutral-400">직원이 없습니다</p>
-              ) : (
-                filtered.map((e) => (
-                  <button
-                    key={e.id}
-                    onClick={() => pick(e.id)}
-                    disabled={pending}
-                    className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-neutral-100 ${
-                      e.id === txn.employee_id ? "font-semibold text-violet-700" : ""
-                    }`}
-                  >
-                    {e.name}
-                  </button>
-                ))
-              )}
-            </div>
-            {current && (
-              <>
-                <div className="my-1 border-t border-neutral-100" />
-                <button
-                  onClick={() => pick(null)}
-                  disabled={pending}
-                  className="block w-full rounded-md px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-50"
-                >
-                  연결 해제(급여 제거)
+                  연결 해제{curEmp ? "(급여 제거)" : ""}
                 </button>
               </>
             )}
