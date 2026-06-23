@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card, Field, TextInput, SelectInput, EmptyState, Badge } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput, SelectInput, EmptyState, Badge } from "@/components/ui";
 import { OptionsManager } from "@/components/options-manager";
 import { LEAVE_TYPE_LABEL, LEAVE_STATUS_LABEL, krw } from "@/lib/labels";
 import { estimateInsurance, computeNet, fullInsurance, freelanceWithholding } from "@/lib/payroll";
@@ -138,7 +138,7 @@ function InsuranceTab({ payrolls, paybacks, month }: Props) {
               ))}
             </div>
             <Field label="금액(월급/지급액)">
-              <TextInput inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="2,800,000" />
+              <NumberInput value={amount} onChange={(v) => setAmount(v)} placeholder="2,800,000" />
             </Field>
             {mode === "REGULAR" ? (
               <Field label="산재요율(%)">
@@ -908,7 +908,7 @@ function PayrollModal({
 
   const f = (k: keyof typeof d, label: string) => (
     <Field label={label}>
-      <TextInput inputMode="numeric" value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} />
+      <NumberInput value={d[k]} onChange={(v) => setD({ ...d, [k]: v })} />
     </Field>
   );
 
@@ -943,10 +943,9 @@ function PayrollModal({
               const label = activeItems.find((o) => o.value === k)?.label ?? k;
               return (
                 <Field key={k} label={label}>
-                  <TextInput
-                    inputMode="numeric"
+                  <NumberInput
                     value={nontax[k]}
-                    onChange={(e) => setNontax((p) => ({ ...p, [k]: e.target.value }))}
+                    onChange={(v) => setNontax((p) => ({ ...p, [k]: v }))}
                     placeholder="0"
                   />
                 </Field>

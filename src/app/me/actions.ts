@@ -3,11 +3,95 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureSelf } from "@/lib/auth-guard";
-import type { LeaveType } from "@/lib/supabase/database.types";
+import { calcAttendance, kstToday, kstNowHM, WORK_MODES } from "@/lib/attendance";
+import { HR_SCALAR_FIELDS, normalizeHrExtra } from "@/lib/hr-card";
+import type { LeaveType, EmployeeRow, AttendanceRow } from "@/lib/supabase/database.types";
 
 export interface Result {
   ok: boolean;
   error?: string;
+}
+
+// ---------------- 근태(출퇴근) ----------------
+
+/** 본인 출근 찍기 — 오늘 기록 생성(이미 있으면 출근시각 유지). */
+export async function clockIn(): Promise<Result> {
+  const g = await ensureSelf();
+  if (g.error || !g.employee) return { ok: false, error: g.error ?? "직원 정보 없음" };
+  const emp = g.employee as EmployeeRow;
+  const db = createAdminClient();
+  const today = kstToday();
+  const now = kstNowHM();
+
+  const { data: existing } = await db
+    .from("attendance")
+    .select("id, check_in")
+    .eq("employee_id", emp.id)
+    .eq("work_date", today)
+    .maybeSingle();
+  const row = existing as { id: string; check_in: string | null } | null;
+  if (row?.check_in) return { ok: false, error: "이미 출근 처리되었습니다." };
+
+  const calc = calcAttendance(now, null, emp.work_start, emp.work_end);
+  if (row) {
+    const { error } = await db.from("attendance").update({ check_in: now, status: calc.status, updated_at: new Date().toISOString() } as never).eq("id", row.id);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await db.from("attendance").insert({
+      company_id: emp.company_id, employee_id: emp.id, work_date: today, check_in: now, status: calc.status, work_mode: "OFFICE",
+    } as never);
+    if (error) return { ok: false, error: error.message };
+  }
+  revalidatePath("/me");
+  return { ok: true };
+}
+
+/** 본인 퇴근 찍기 — 근무시간·상태 확정. */
+export async function clockOut(): Promise<Result> {
+  const g = await ensureSelf();
+  if (g.error || !g.employee) return { ok: false, error: g.error ?? "직원 정보 없음" };
+  const emp = g.employee as EmployeeRow;
+  const db = createAdminClient();
+  const today = kstToday();
+  const now = kstNowHM();
+
+  const { data: existing } = await db
+    .from("attendance")
+    .select("*")
+    .eq("employee_id", emp.id)
+    .eq("work_date", today)
+    .maybeSingle();
+  const row = existing as AttendanceRow | null;
+  if (!row || !row.check_in) return { ok: false, error: "출근 기록이 없습니다. 먼저 출근하세요." };
+
+  const calc = calcAttendance(row.check_in, now, emp.work_start, emp.work_end);
+  const { error } = await db
+    .from("attendance")
+    .update({ check_out: now, work_minutes: calc.workMinutes, status: calc.status, updated_at: new Date().toISOString() } as never)
+    .eq("id", row.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/me");
+  return { ok: true };
+}
+
+/** 본인 근무상태 변경(사무실/재택/외근/출장). */
+export async function setWorkMode(mode: string): Promise<Result> {
+  const g = await ensureSelf();
+  if (g.error || !g.employee) return { ok: false, error: g.error ?? "직원 정보 없음" };
+  if (!WORK_MODES.includes(mode as (typeof WORK_MODES)[number])) return { ok: false, error: "잘못된 근무상태" };
+  const emp = g.employee as EmployeeRow;
+  const db = createAdminClient();
+  const today = kstToday();
+
+  const { data: existing } = await db.from("attendance").select("id").eq("employee_id", emp.id).eq("work_date", today).maybeSingle();
+  const row = existing as { id: string } | null;
+  if (row) {
+    await db.from("attendance").update({ work_mode: mode, updated_at: new Date().toISOString() } as never).eq("id", row.id);
+  } else {
+    await db.from("attendance").insert({ company_id: emp.company_id, employee_id: emp.id, work_date: today, work_mode: mode } as never);
+  }
+  revalidatePath("/me");
+  return { ok: true };
 }
 
 /** 본인 휴가 신청(PENDING 으로 생성 → 관리자 승인). */
@@ -81,6 +165,39 @@ export async function updateMyInfo(patch: Record<string, string | null>): Promis
     if (k in patch) clean[k] = (patch[k] ?? "").toString().trim() || null;
   }
   if (Object.keys(clean).length === 0) return { ok: true };
+  const db = createAdminClient();
+  const { error } = await db.from("employees").update(clean as never).eq("id", emp.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/me");
+  return { ok: true };
+}
+
+/** 본인 프로필 사진 저장(data URL). null 이면 삭제. */
+export async function updateMyPhoto(dataUrl: string | null): Promise<Result> {
+  const g = await ensureSelf();
+  if (g.error || !g.employee) return { ok: false, error: g.error ?? "직원 정보 없음" };
+  if (dataUrl && dataUrl.length > 2_000_000) return { ok: false, error: "이미지 용량이 너무 큽니다. 더 작은 사진을 사용하세요." };
+  const db = createAdminClient();
+  const { error } = await db.from("employees").update({ photo_url: dataUrl } as never).eq("id", g.employee.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/me");
+  return { ok: true };
+}
+
+/** 본인 인사카드 저장 — 신상 스칼라(화이트리스트) + 반복항목(hr_extra). 즉시 회사 기록에 반영. */
+export async function saveMyHrCard(
+  scalars: Record<string, string | null>,
+  hrExtra: unknown
+): Promise<Result> {
+  const g = await ensureSelf();
+  if (g.error || !g.employee) return { ok: false, error: g.error ?? "직원 정보 없음" };
+  const emp = g.employee as EmployeeRow;
+  const allow = new Set<string>(HR_SCALAR_FIELDS);
+  const clean: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(scalars)) {
+    if (allow.has(k)) clean[k] = (v ?? "").toString().trim() || null;
+  }
+  clean.hr_extra = normalizeHrExtra(hrExtra);
   const db = createAdminClient();
   const { error } = await db.from("employees").update(clean as never).eq("id", emp.id);
   if (error) return { ok: false, error: error.message };

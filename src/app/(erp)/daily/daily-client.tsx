@@ -132,13 +132,10 @@ export function DailyClient({ date, sales, purchases, buys, bankIn, bankOut, mon
   );
 }
 
-/** 큰 금액 압축 표기: 1,234,000 → 123만 / 1.2억 */
+/** 부호 + 원금액 그대로(천단위 콤마). 예: 1234000 → +1,234,000 */
 function compactWon(n: number) {
-  const a = Math.abs(n);
   const sign = n > 0 ? "+" : n < 0 ? "−" : "";
-  if (a >= 100000000) return `${sign}${(a / 100000000).toFixed(1)}억`;
-  if (a >= 10000) return `${sign}${Math.round(a / 10000)}만`;
-  return `${sign}${a.toLocaleString("ko-KR")}`;
+  return `${sign}${Math.abs(n).toLocaleString("ko-KR")}`;
 }
 
 function MonthCalendar({
@@ -199,7 +196,7 @@ function MonthCalendar({
               }`}
             >
               <span className={`text-[11px] ${selected ? "font-bold text-neutral-900" : "text-neutral-400"}`}>{day}</span>
-              {net ? <span className="mt-auto w-full truncate text-[11px] font-semibold tabular">{compactWon(net)}</span> : null}
+              {net ? <span className="mt-auto w-full truncate text-[10px] font-semibold tabular">{compactWon(net)}</span> : null}
             </button>
           );
         })}

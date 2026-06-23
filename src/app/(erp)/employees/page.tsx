@@ -14,7 +14,10 @@ import type {
   EmployeeDocumentRow,
   EmployeeEventRow,
   PaybackRow,
+  DocumentTemplateRow,
+  DocumentIssueRow,
 } from "@/lib/supabase/database.types";
+import type { VarCompany } from "@/lib/document-vars";
 
 function groupBy<T extends { employee_id: string | null }>(rows: T[]): Record<string, T[]> {
   const out: Record<string, T[]> = {};
@@ -40,16 +43,19 @@ export default async function EmployeesPage({
   let query = supabase.from("employees").select("*").order("name");
   if (filter) query = query.eq("company_id", filter);
 
-  const [{ data, error }, ctx, { data: opts }, { data: roleData }] = await Promise.all([
-    query,
-    getImportCtx(),
-    supabase
-      .from("field_options")
-      .select("*")
-      .in("category", ["employment_type", "role", "employee_status"])
-      .order("sort_order"),
-    supabase.from("roles").select("key, label").order("sort_order"),
-  ]);
+  const [{ data, error }, ctx, { data: opts }, { data: roleData }, { data: tplData }, { data: coData }] =
+    await Promise.all([
+      query,
+      getImportCtx(),
+      supabase
+        .from("field_options")
+        .select("*")
+        .in("category", ["employment_type", "role", "employee_status", "job_rank", "job_title", "department"])
+        .order("sort_order"),
+      supabase.from("roles").select("key, label").order("sort_order"),
+      supabase.from("document_templates").select("*").eq("is_active", true).order("sort_order").order("created_at"),
+      supabase.from("companies").select("id, name, biz_no, ceo_name, address, biz_type, biz_category"),
+    ]);
 
   if (error) {
     return <p className="text-sm text-red-600">데이터를 불러오지 못했습니다: {error.message}</p>;
@@ -66,9 +72,10 @@ export default async function EmployeesPage({
   let contractsByEmp: Record<string, LaborContractRow[]> = {};
   let docsByEmp: Record<string, EmployeeDocumentRow[]> = {};
   let eventsByEmp: Record<string, EmployeeEventRow[]> = {};
+  let docIssuesByEmp: Record<string, DocumentIssueRow[]> = {};
   const paybacksByEmp: Record<string, PaybackBrief[]> = {};
   if (empIds.length > 0) {
-    const [{ data: pays }, { data: leaves }, { data: certs }, { data: contracts }, { data: docs }, { data: events }] =
+    const [{ data: pays }, { data: leaves }, { data: certs }, { data: contracts }, { data: docs }, { data: events }, { data: issues }] =
       await Promise.all([
         supabase.from("payrolls").select("*").in("employee_id", empIds).order("year_month", { ascending: false }),
         supabase.from("leave_requests").select("*").in("employee_id", empIds).order("start_date", { ascending: false }),
@@ -80,6 +87,7 @@ export default async function EmployeesPage({
         supabase.from("labor_contracts").select("*").in("employee_id", empIds).order("start_date", { ascending: false }),
         supabase.from("employee_documents").select("*").in("employee_id", empIds).order("created_at", { ascending: false }),
         supabase.from("employee_events").select("*").in("employee_id", empIds).order("event_date", { ascending: false }),
+        supabase.from("document_issues").select("*").in("employee_id", empIds).order("created_at", { ascending: false }),
       ]);
     payrollsByEmp = groupBy((pays ?? []) as PayrollRow[]);
     leavesByEmp = groupBy((leaves ?? []) as LeaveRequestRow[]);
@@ -87,6 +95,7 @@ export default async function EmployeesPage({
     contractsByEmp = groupBy((contracts ?? []) as LaborContractRow[]);
     docsByEmp = groupBy((docs ?? []) as EmployeeDocumentRow[]);
     eventsByEmp = groupBy((events ?? []) as EmployeeEventRow[]);
+    docIssuesByEmp = groupBy((issues ?? []) as DocumentIssueRow[]);
 
     // 페이백 — 직원이 받는(또는 받을) 페이백. 출처 거래일·적요는 통장거래에서 보강.
     const { data: pb } = await supabase
@@ -129,11 +138,20 @@ export default async function EmployeesPage({
     }
   }
 
+  // 사업자 변수용 전체 정보 맵(서류 변수 치환)
+  const companiesVar: Record<string, VarCompany> = {};
+  for (const c of (coData ?? []) as ({ id: string } & VarCompany)[]) {
+    companiesVar[c.id] = { name: c.name, biz_no: c.biz_no, ceo_name: c.ceo_name, address: c.address, biz_type: c.biz_type, biz_category: c.biz_category };
+  }
+
   return (
     <EmployeesClient
       rows={employees}
       ctx={ctx}
       options={(opts ?? []) as FieldOptionRow[]}
+      documentTemplates={(tplData ?? []) as DocumentTemplateRow[]}
+      docIssuesByEmp={docIssuesByEmp}
+      companiesVar={companiesVar}
       accounts={accounts}
       roles={(roleData ?? []) as { key: string; label: string }[]}
       payrollsByEmp={payrollsByEmp}

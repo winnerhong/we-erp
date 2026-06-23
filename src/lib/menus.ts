@@ -8,6 +8,7 @@ export interface MenuItem {
 /** 일반 업무 메뉴(역할별 접근 제어 대상). */
 export const MENUS: MenuItem[] = [
   { href: "/", label: "대시보드", icon: "📊" },
+  { href: "/sales", label: "일매출", icon: "🧾" },
   { href: "/daily", label: "일일결산", icon: "📅" },
   { href: "/report", label: "손익 리포트", icon: "🧮" },
   { href: "/finance", label: "받을돈·줄돈", icon: "💵" },
@@ -21,5 +22,7 @@ export const MENUS: MenuItem[] = [
   { href: "/cards", label: "카드원장", icon: "💳" },
   { href: "/paybacks", label: "페이백", icon: "💸" },
   { href: "/purchases", label: "구매 요청", icon: "🛒" },
+  { href: "/attendance", label: "근태현황", icon: "🕘" },
   { href: "/hr", label: "급여·인사", icon: "💰" },
+  { href: "/documents", label: "서류관리", icon: "📄" },
 ];

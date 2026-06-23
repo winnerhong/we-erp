@@ -4,11 +4,11 @@ import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { InlineSelect } from "@/components/inline-select";
-import { OptionsManager } from "@/components/options-manager";
+import { OptionsManager, type OptionCat } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
 import { PaybackList, type PaybackBrief } from "@/components/payback-list";
-import { Field, TextInput, SelectInput, Badge, FormSection } from "@/components/ui";
+import { Field, TextInput, NumberInput, SelectInput, Badge, FormSection, FileButton } from "@/components/ui";
 import { krw, LEAVE_TYPE_LABEL, LEAVE_STATUS_LABEL } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
 import { checkMinWage, severanceEstimate, leaveAllowance } from "@/lib/payroll";
@@ -23,8 +23,15 @@ import type {
   LaborContractRow,
   EmployeeDocumentRow,
   EmployeeEventRow,
+  DocumentTemplateRow,
+  DocumentIssueRow,
 } from "@/lib/supabase/database.types";
 import type { ImportCtx } from "@/lib/import-specs";
+import type { VarCompany, VarLabels } from "@/lib/document-vars";
+import { DocumentIssuePanel } from "@/components/document-issue-panel";
+import { createIssue, saveSignedFile, deleteIssue } from "@/app/(erp)/documents/actions";
+import { HrCardEditor } from "@/components/hr-card-editor";
+import { normalizeHrExtra, HR_SCALAR_FIELDS, type HrScalarField } from "@/lib/hr-card";
 import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
 import {
   createCertificate,
@@ -32,7 +39,6 @@ import {
   createLeave,
   reviewLeave,
   deleteLeave,
-  createContract,
   deleteContract,
   createDocument,
   deleteDocument,
@@ -46,6 +52,7 @@ import {
   resetEmployeePassword,
   setEmployeeAccountRole,
   revokeEmployeeAccount,
+  loginAsEmployee,
 } from "./actions";
 
 export interface AccountInfo {
@@ -138,7 +145,24 @@ function TeacherSyncControls() {
   );
 }
 
-type TabKey = "info" | "work" | "pay" | "payback" | "leave" | "docs" | "history";
+type TabKey = "info" | "card" | "work" | "pay" | "payback" | "leave" | "docs" | "history";
+
+// 관리형 옵션 카테고리(⚙ 항목 + 각 항목 옆 톱니 공용)
+// EmployeeRow → 인사카드 신상 스칼라 초기값
+function hrScalarsOf(emp: EmployeeRow): Partial<Record<HrScalarField, string>> {
+  const o: Partial<Record<HrScalarField, string>> = {};
+  for (const k of HR_SCALAR_FIELDS) o[k] = (emp[k as keyof EmployeeRow] as string | null) ?? "";
+  return o;
+}
+
+const EMP_OPTION_CATS: OptionCat[] = [
+  { key: "department", title: "부서", hint: "경영지원·교육·운영·영업 등" },
+  { key: "employment_type", title: "고용형태", hint: "정규직·시급제·일일알바 등" },
+  { key: "role", title: "권한", hint: "직원·부서장·관리자 등" },
+  { key: "employee_status", title: "상태", hint: "재직·휴직·퇴사·계약종료 등" },
+  { key: "job_rank", title: "직급", hint: "사원·대리·과장·부장 등" },
+  { key: "job_title", title: "직책", hint: "팀원·팀장·실장·대표 등" },
+];
 
 export function EmployeesClient({
   rows,
@@ -153,6 +177,9 @@ export function EmployeesClient({
   docsByEmp,
   eventsByEmp,
   paybacksByEmp,
+  documentTemplates,
+  docIssuesByEmp,
+  companiesVar,
   initialSelectedId,
   initialTab,
 }: {
@@ -168,17 +195,20 @@ export function EmployeesClient({
   docsByEmp: Record<string, EmployeeDocumentRow[]>;
   eventsByEmp: Record<string, EmployeeEventRow[]>;
   paybacksByEmp: Record<string, PaybackBrief[]>;
+  documentTemplates: DocumentTemplateRow[];
+  docIssuesByEmp: Record<string, DocumentIssueRow[]>;
+  companiesVar: Record<string, VarCompany>;
   initialSelectedId?: string | null;
   initialTab?: string | null;
 }) {
   const router = useRouter();
-  const [mgrOpen, setMgrOpen] = useState(false);
+  const [mgrCats, setMgrCats] = useState<OptionCat[] | null>(null);
   const [csvOpen, setCsvOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [acctFor, setAcctFor] = useState<EmployeeRow | null>(null);
   const [editFor, setEditFor] = useState<EmployeeRow | null>(null);
   const [search, setSearch] = useState("");
-  const TAB_KEYS: TabKey[] = ["info", "work", "pay", "payback", "leave", "docs", "history"];
+  const TAB_KEYS: TabKey[] = ["info", "card", "work", "pay", "payback", "leave", "docs", "history"];
   const [tab, setTab] = useState<TabKey>(
     initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as TabKey) : "info"
   );
@@ -194,9 +224,15 @@ export function EmployeesClient({
   const empSel = optsOf("employment_type").map((o) => ({ value: o.value, label: o.label }));
   const roleSel = optsOf("role").map((o) => ({ value: o.value, label: o.label }));
   const statusSel = optsOf("employee_status").map((o) => ({ value: o.value, label: o.label }));
+  const rankSel = optsOf("job_rank").map((o) => ({ value: o.value, label: o.label }));
+  const titleSel = optsOf("job_title").map((o) => ({ value: o.value, label: o.label }));
+  const deptSel = optsOf("department").map((o) => ({ value: o.value, label: o.label }));
   const empLabel = labelOf("employment_type");
   const roleLabel = labelOf("role");
   const statusLabel = labelOf("employee_status");
+  const rankLabel = labelOf("job_rank");
+  const titleLabel = labelOf("job_title");
+  const deptLabel = labelOf("department");
   const statusColor = colorOf("employee_status");
   const empColor = colorOf("employment_type");
 
@@ -241,7 +277,7 @@ export function EmployeesClient({
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <button
-            onClick={() => setMgrOpen(true)}
+            onClick={() => setMgrCats(EMP_OPTION_CATS)}
             className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
           >
             ⚙ 항목
@@ -269,9 +305,15 @@ export function EmployeesClient({
           empSel={empSel}
           roleSel={roleSel}
           statusSel={statusSel}
+          rankSel={rankSel}
+          titleSel={titleSel}
+          deptSel={deptSel}
           empLabel={empLabel}
           roleLabel={roleLabel}
           statusLabel={statusLabel}
+          rankLabel={rankLabel}
+          titleLabel={titleLabel}
+          deptLabel={deptLabel}
           companyName={companyName}
           onOpenDetail={(id) => {
             setSelectedId(id);
@@ -372,6 +414,18 @@ export function EmployeesClient({
               <div className="mt-4 flex flex-wrap gap-2">
                 <HeaderBtn onClick={() => setEditFor(selected)}>✏️ 수정</HeaderBtn>
                 <HeaderBtn onClick={() => setAcctFor(selected)}>🔑 계정·비번</HeaderBtn>
+                {accounts[selected.id] && (
+                  <HeaderBtn
+                    onClick={() => {
+                      if (!confirm(`${selected.name} 직원 계정으로 전환 로그인합니다.\n\n관리자 화면으로 돌아가려면 로그아웃 후 본인 계정으로 다시 로그인하세요. 계속할까요?`)) return;
+                      void loginAsEmployee(selected.id).then((r) => {
+                        if (r?.error) alert(r.error);
+                      });
+                    }}
+                  >
+                    👤 직원 로그인
+                  </HeaderBtn>
+                )}
                 <HeaderBtn
                   danger
                   onClick={() => {
@@ -391,6 +445,7 @@ export function EmployeesClient({
             <div className="flex flex-wrap gap-1 border-b border-neutral-200">
               {([
                 ["info", "🧾 기본정보·계좌"],
+                ["card", "🪪 인사카드"],
                 ["work", "📋 근로조건·4대보험"],
                 ["pay", "💰 급여·퇴직정산"],
                 ["payback", "⭐ 포인트"],
@@ -422,8 +477,20 @@ export function EmployeesClient({
                 empLabel={empLabel}
                 roleLabel={roleLabel}
                 statusLabel={statusLabel}
+                rankLabel={rankLabel}
+                titleLabel={titleLabel}
+                deptLabel={deptLabel}
                 empColor={empColor}
                 onEdit={() => setEditFor(selected)}
+                onManage={(key) => setMgrCats(EMP_OPTION_CATS.filter((c) => c.key === key))}
+              />
+            )}
+            {tab === "card" && (
+              <HrCardEditor
+                key={selected.id}
+                initialScalars={hrScalarsOf(selected)}
+                initialExtra={normalizeHrExtra(selected.hr_extra)}
+                onSave={(sc, ex) => updateRow("employees", selected.id, { ...sc, hr_extra: ex })}
               />
             )}
             {tab === "work" && (
@@ -450,6 +517,10 @@ export function EmployeesClient({
                 docs={docsByEmp[selected.id] ?? []}
                 empLabel={empLabel}
                 onChanged={refresh}
+                templates={documentTemplates}
+                issues={docIssuesByEmp[selected.id] ?? []}
+                company={companiesVar[selected.company_id ?? ""] ?? null}
+                labels={{ employment_type: empLabel, job_rank: rankLabel, job_title: titleLabel }}
               />
             )}
             {tab === "history" && (
@@ -460,16 +531,12 @@ export function EmployeesClient({
       </div>
       )}
 
-      {mgrOpen && (
+      {mgrCats && (
         <OptionsManager
           options={options}
-          cats={[
-            { key: "employment_type", title: "고용형태", hint: "정규직·시급제·일일알바 등" },
-            { key: "role", title: "권한", hint: "직원·부서장·관리자 등" },
-            { key: "employee_status", title: "상태", hint: "재직·휴직·퇴사·계약종료 등" },
-          ]}
+          cats={mgrCats}
           onClose={() => {
-            setMgrOpen(false);
+            setMgrCats(null);
             refresh();
           }}
         />
@@ -488,6 +555,10 @@ export function EmployeesClient({
           empSel={empSel}
           roleSel={roleSel}
           statusSel={statusSel}
+          rankSel={rankSel}
+          titleSel={titleSel}
+          deptSel={deptSel}
+          roles={roles}
           onClose={() => setAddOpen(false)}
           onSaved={(id) => {
             setAddOpen(false);
@@ -504,6 +575,12 @@ export function EmployeesClient({
           empSel={empSel}
           roleSel={roleSel}
           statusSel={statusSel}
+          rankSel={rankSel}
+          titleSel={titleSel}
+          deptSel={deptSel}
+          roles={roles}
+          accountInfo={accounts[editFor.id] ?? null}
+          onAccountChanged={refresh}
           onClose={() => setEditFor(null)}
           onSaved={() => {
             setEditFor(null);
@@ -539,9 +616,15 @@ function EmployeeGrid({
   empSel,
   roleSel,
   statusSel,
+  rankSel,
+  titleSel,
+  deptSel,
   empLabel,
   roleLabel,
   statusLabel,
+  rankLabel,
+  titleLabel,
+  deptLabel,
   companyName,
   onOpenDetail,
   onChanged,
@@ -551,9 +634,15 @@ function EmployeeGrid({
   empSel: { value: string; label: string }[];
   roleSel: { value: string; label: string }[];
   statusSel: { value: string; label: string }[];
+  rankSel: { value: string; label: string }[];
+  titleSel: { value: string; label: string }[];
+  deptSel: { value: string; label: string }[];
   empLabel: Record<string, string>;
   roleLabel: Record<string, string>;
   statusLabel: Record<string, string>;
+  rankLabel: Record<string, string>;
+  titleLabel: Record<string, string>;
+  deptLabel: Record<string, string>;
   companyName: Map<string, string>;
   onOpenDetail: (id: string) => void;
   onChanged: () => void;
@@ -594,6 +683,9 @@ function EmployeeGrid({
 
   const companyOpts = [{ value: "", label: "미배정" }, ...ctx.companies.map((c) => ({ value: c.id, label: c.name }))];
   const statusOpts = [{ value: "", label: "미지정" }, ...statusSel];
+  const rankOpts = [{ value: "", label: "미지정" }, ...rankSel];
+  const titleOpts = [{ value: "", label: "미지정" }, ...titleSel];
+  const deptOpts = [{ value: "", label: "미지정" }, ...deptSel];
 
   const columns: GridCol<EmployeeRow>[] = [
     { key: "name", label: "이름", width: 110, edit: "text", text: (r) => r.name ?? "" },
@@ -614,7 +706,31 @@ function EmployeeGrid({
       options: empSel,
       text: (r) => empLabel[r.employment_type] ?? r.employment_type,
     },
+    {
+      key: "department",
+      label: "부서",
+      width: 100,
+      edit: "select",
+      options: deptOpts,
+      text: (r) => (r.department ? deptLabel[r.department] ?? r.department : ""),
+    },
     { key: "role", label: "권한", width: 90, edit: "select", options: roleSel, text: (r) => roleLabel[r.role] ?? r.role },
+    {
+      key: "job_rank",
+      label: "직급",
+      width: 90,
+      edit: "select",
+      options: rankOpts,
+      text: (r) => (r.job_rank ? rankLabel[r.job_rank] ?? r.job_rank : ""),
+    },
+    {
+      key: "job_title",
+      label: "직책",
+      width: 90,
+      edit: "select",
+      options: titleOpts,
+      text: (r) => (r.job_title ? titleLabel[r.job_title] ?? r.job_title : ""),
+    },
     {
       key: "status",
       label: "상태",
@@ -894,8 +1010,12 @@ function InfoTab({
   empLabel,
   roleLabel,
   statusLabel,
+  rankLabel,
+  titleLabel,
+  deptLabel,
   empColor,
   onEdit,
+  onManage,
 }: {
   emp: EmployeeRow;
   ctx: ImportCtx;
@@ -905,8 +1025,12 @@ function InfoTab({
   empLabel: Record<string, string>;
   roleLabel: Record<string, string>;
   statusLabel: Record<string, string>;
+  rankLabel: Record<string, string>;
+  titleLabel: Record<string, string>;
+  deptLabel: Record<string, string>;
   empColor: Record<string, string>;
   onEdit: () => void;
+  onManage: (catKey: string) => void;
 }) {
   const withCurrent = (
     sel: { value: string; label: string }[],
@@ -928,7 +1052,19 @@ function InfoTab({
           <Row label="닉네임">{emp.nickname || <span className="text-neutral-300">미등록</span>}</Row>
           <Row label="연락처">{emp.phone || "-"}</Row>
           <Row label="이메일">{emp.email || "-"}</Row>
-          <Row label="소속">
+          <Row
+            label="소속"
+            action={
+              <Link
+                href="/companies"
+                title="사업자 추가·수정·삭제"
+                aria-label="사업자 관리"
+                className="text-neutral-300 transition-colors hover:text-neutral-700"
+              >
+                ⚙
+              </Link>
+            }
+          >
             <InlineSelect
               kind="employees"
               id={emp.id}
@@ -939,7 +1075,7 @@ function InfoTab({
               tone={emp.company_id ? toneClass("teal") : toneClass("amber")}
             />
           </Row>
-          <Row label="고용형태">
+          <Row label="고용형태" action={<GearBtn onClick={() => onManage("employment_type")} title="고용형태 항목 관리" />}>
             <InlineSelect
               kind="employees"
               id={emp.id}
@@ -949,7 +1085,7 @@ function InfoTab({
               tone={toneClass(empColor[emp.employment_type])}
             />
           </Row>
-          <Row label="권한">
+          <Row label="권한" action={<GearBtn onClick={() => onManage("role")} title="권한 항목 관리" />}>
             <InlineSelect
               kind="employees"
               id={emp.id}
@@ -958,7 +1094,16 @@ function InfoTab({
               options={withCurrent(roleSel, roleLabel, emp.role)}
             />
           </Row>
-          <Row label="상태">
+          <Row label="부서" action={<GearBtn onClick={() => onManage("department")} title="부서 항목 관리" />}>
+            {emp.department ? (deptLabel[emp.department] ?? emp.department) : <span className="text-neutral-300">미지정</span>}
+          </Row>
+          <Row label="직급" action={<GearBtn onClick={() => onManage("job_rank")} title="직급 항목 관리" />}>
+            {emp.job_rank ? (rankLabel[emp.job_rank] ?? emp.job_rank) : <span className="text-neutral-300">미지정</span>}
+          </Row>
+          <Row label="직책" action={<GearBtn onClick={() => onManage("job_title")} title="직책 항목 관리" />}>
+            {emp.job_title ? (titleLabel[emp.job_title] ?? emp.job_title) : <span className="text-neutral-300">미지정</span>}
+          </Row>
+          <Row label="상태" action={<GearBtn onClick={() => onManage("employee_status")} title="상태 항목 관리" />}>
             <InlineSelect
               kind="employees"
               id={emp.id}
@@ -1035,12 +1180,29 @@ function maskResident(v: string): string {
   return v;
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+function Row({ label, children, action }: { label: string; children: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-4 py-2.5">
-      <dt className="shrink-0 text-neutral-400">{label}</dt>
+      <dt className="flex shrink-0 items-center gap-1 text-neutral-400">
+        {label}
+        {action}
+      </dt>
       <dd className="text-right font-medium text-neutral-800">{children}</dd>
     </div>
+  );
+}
+
+/** 항목(목록) 설정 톱니 버튼 — 라벨 옆에 붙여 해당 목록 편집/추가/삭제 모달을 연다. */
+function GearBtn({ onClick, title }: { onClick: () => void; title: string }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="text-neutral-300 transition-colors hover:text-neutral-700"
+    >
+      ⚙
+    </button>
   );
 }
 
@@ -1469,6 +1631,10 @@ function DocsTab({
   docs,
   empLabel,
   onChanged,
+  templates,
+  issues,
+  company,
+  labels,
 }: {
   emp: EmployeeRow;
   certs: EmploymentCertificateRow[];
@@ -1476,24 +1642,20 @@ function DocsTab({
   docs: EmployeeDocumentRow[];
   empLabel: Record<string, string>;
   onChanged: () => void;
+  templates: DocumentTemplateRow[];
+  issues: DocumentIssueRow[];
+  company: VarCompany | null;
+  labels: VarLabels;
 }) {
+  const todayStr = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  })();
   const [pending, startTransition] = useTransition();
   const [issuing, setIssuing] = useState(false);
   const [form, setForm] = useState({ position: "", department: "", purpose: "", submit_to: "" });
 
   // 근로계약서 추가 폼
-  const [cAdding, setCAdding] = useState(false);
-  const [c, setC] = useState({
-    contract_type: "",
-    start_date: "",
-    end_date: "",
-    wage_type: "MONTHLY",
-    wage_amount: "",
-    signed_on: "",
-    file_url: "",
-    memo: "",
-  });
-
   // 서류 추가 폼
   const [dAdding, setDAdding] = useState(false);
   const [doc, setDoc] = useState({ doc_type: "통장사본", title: "", issued_on: "", expires_on: "", file_url: "", memo: "" });
@@ -1513,26 +1675,6 @@ function DocsTab({
       });
       setIssuing(false);
       setForm({ position: "", department: "", purpose: "", submit_to: "" });
-      onChanged();
-    });
-  }
-
-  function addContract() {
-    startTransition(async () => {
-      await createContract({
-        company_id: emp.company_id ?? undefined,
-        employee_id: emp.id,
-        contract_type: c.contract_type || null,
-        start_date: c.start_date || null,
-        end_date: c.end_date || null,
-        wage_type: c.wage_type,
-        wage_amount: c.wage_amount ? Number(c.wage_amount.replace(/[^\d.-]/g, "")) : null,
-        signed_on: c.signed_on || null,
-        file_url: c.file_url || null,
-        memo: c.memo || null,
-      });
-      setCAdding(false);
-      setC({ contract_type: "", start_date: "", end_date: "", wage_type: "MONTHLY", wage_amount: "", signed_on: "", file_url: "", memo: "" });
       onChanged();
     });
   }
@@ -1558,53 +1700,27 @@ function DocsTab({
 
   return (
     <div className="space-y-4">
-      {/* 근로계약서 */}
-      <section className="rounded-2xl border border-neutral-200 bg-white">
-        <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
-          <h3 className="font-semibold text-neutral-800">
-            📝 근로계약서 <span className="ml-1 text-xs font-normal text-neutral-400">{contracts.length}건</span>
-          </h3>
-          <button onClick={() => setCAdding((v) => !v)} className="rounded-lg border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-50">
-            + 계약서 등록
-          </button>
-        </div>
-        {cAdding && (
-          <div className="grid grid-cols-2 gap-2 border-b border-neutral-100 bg-neutral-50 p-3 sm:grid-cols-3">
-            <TextInput value={c.contract_type} onChange={(e) => setC({ ...c, contract_type: e.target.value })} placeholder="계약형태(정규/계약/시급)" />
-            <SelectInput value={c.wage_type} onChange={(e) => setC({ ...c, wage_type: e.target.value })}>
-              <option value="MONTHLY">월급</option>
-              <option value="HOURLY">시급</option>
-            </SelectInput>
-            <TextInput inputMode="numeric" value={c.wage_amount} onChange={(e) => setC({ ...c, wage_amount: e.target.value })} placeholder="임금액" />
-            <label className="text-xs text-neutral-500">시작일<TextInput type="date" value={c.start_date} onChange={(e) => setC({ ...c, start_date: e.target.value })} /></label>
-            <label className="text-xs text-neutral-500">종료일(계약직)<TextInput type="date" value={c.end_date} onChange={(e) => setC({ ...c, end_date: e.target.value })} /></label>
-            <label className="text-xs text-neutral-500">서명일<TextInput type="date" value={c.signed_on} onChange={(e) => setC({ ...c, signed_on: e.target.value })} /></label>
-            <div className="col-span-2 sm:col-span-3">
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    const url = await fileToDataUrl(f);
-                    if (url) setC((p) => ({ ...p, file_url: url }));
-                  }
-                }}
-                className="text-xs"
-              />
-              {c.file_url && <span className="ml-2 text-xs text-emerald-600">첨부됨 ✓</span>}
-            </div>
-            <div className="col-span-2 flex gap-2 sm:col-span-3">
-              <TextInput value={c.memo} onChange={(e) => setC({ ...c, memo: e.target.value })} placeholder="메모" />
-              <button onClick={addContract} disabled={pending} className="shrink-0 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">
-                저장
-              </button>
-            </div>
+      {/* 서류 양식 발행·보관 */}
+      <DocumentIssuePanel
+        employee={emp}
+        company={company}
+        labels={labels}
+        today={todayStr}
+        templates={templates}
+        issues={issues}
+        companyId={emp.company_id ?? null}
+        actions={{ create: createIssue, saveSigned: saveSignedFile, remove: deleteIssue }}
+      />
+
+      {/* 근로계약서: 신규는 위 '서류 발행'에서 '표준 근로계약서' 양식으로 발행. 여기는 과거 기록(읽기전용)만. */}
+      {contracts.length > 0 && (
+        <section className="rounded-2xl border border-neutral-200 bg-white">
+          <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
+            <h3 className="font-semibold text-neutral-800">
+              📝 기존 근로계약서 <span className="ml-1 text-xs font-normal text-neutral-400">{contracts.length}건 · 이력</span>
+            </h3>
+            <span className="text-[11px] text-neutral-400">신규는 ‘서류 발행’ 사용</span>
           </div>
-        )}
-        {contracts.length === 0 ? (
-          <p className="px-5 py-8 text-center text-sm text-neutral-400">등록된 근로계약서가 없습니다. (미작성 시 과태료 대상)</p>
-        ) : (
           <div className="divide-y divide-neutral-50">
             {contracts.map((ct) => (
               <div key={ct.id} className="flex items-center justify-between gap-2 px-5 py-2.5 text-sm">
@@ -1638,8 +1754,8 @@ function DocsTab({
               </div>
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* 재직증명서 */}
@@ -1702,7 +1818,7 @@ function DocsTab({
         <section className="rounded-2xl border border-neutral-200 bg-white">
           <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
             <h3 className="font-semibold text-neutral-800">
-              🗂 증빙 서류함 <span className="ml-1 text-xs font-normal text-neutral-400">{docs.length}건</span>
+              🗂 첨부 보관함 <span className="ml-1 text-xs font-normal text-neutral-400">{docs.length}건 · 스캔본·증빙</span>
             </h3>
             <button onClick={() => setDAdding((v) => !v)} className="rounded-lg border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-50">
               + 서류 추가
@@ -1720,19 +1836,14 @@ function DocsTab({
                 <label className="text-xs text-neutral-500">발급일<TextInput type="date" value={doc.issued_on} onChange={(e) => setDoc({ ...doc, issued_on: e.target.value })} /></label>
                 <label className="text-xs text-neutral-500">만료일<TextInput type="date" value={doc.expires_on} onChange={(e) => setDoc({ ...doc, expires_on: e.target.value })} /></label>
               </div>
-              <input
-                type="file"
+              <FileButton
                 accept="image/*,application/pdf"
-                onChange={async (e) => {
-                  const f = e.target.files?.[0];
-                  if (f) {
-                    const url = await fileToDataUrl(f);
-                    if (url) setDoc((p) => ({ ...p, file_url: url }));
-                  }
+                label="파일 선택 (이미지·PDF)"
+                onFile={async (f) => {
+                  const url = await fileToDataUrl(f);
+                  if (url) setDoc((p) => ({ ...p, file_url: url }));
                 }}
-                className="text-xs"
               />
-              {doc.file_url && <span className="ml-2 text-xs text-emerald-600">첨부됨 ✓</span>}
               <div className="text-right">
                 <button onClick={addDoc} disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">
                   저장
@@ -1924,6 +2035,12 @@ function EditModal({
   empSel,
   roleSel,
   statusSel,
+  rankSel,
+  titleSel,
+  deptSel,
+  roles,
+  accountInfo,
+  onAccountChanged,
   onClose,
   onSaved,
 }: {
@@ -1933,6 +2050,12 @@ function EditModal({
   empSel: { value: string; label: string }[];
   roleSel: { value: string; label: string }[];
   statusSel: { value: string; label: string }[];
+  rankSel: { value: string; label: string }[];
+  titleSel: { value: string; label: string }[];
+  deptSel: { value: string; label: string }[];
+  roles: { key: string; label: string }[];
+  accountInfo?: AccountInfo | null;
+  onAccountChanged?: () => void;
   onClose: () => void;
   onSaved: (id?: string) => void;
 }) {
@@ -1950,6 +2073,9 @@ function EditModal({
     company_id: emp?.company_id ?? "",
     employment_type: emp?.employment_type ?? empSel[0]?.value ?? "",
     role: emp?.role ?? roleSel[0]?.value ?? "",
+    department: emp?.department ?? "",
+    job_rank: emp?.job_rank ?? "",
+    job_title: emp?.job_title ?? "",
     status: emp?.status ?? "",
     hired_on: emp?.hired_on ?? "",
     base_salary: emp?.base_salary?.toString() ?? "",
@@ -1995,6 +2121,9 @@ function EditModal({
       company_id: d.company_id || null,
       employment_type: d.employment_type,
       role: d.role,
+      department: d.department || null,
+      job_rank: d.job_rank || null,
+      job_title: d.job_title || null,
       status: d.status || null,
       hired_on: d.hired_on || null,
       base_salary: numOrNull(d.base_salary),
@@ -2064,14 +2193,32 @@ function EditModal({
               {roleSel.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </SelectInput>
           </Field>
+          <Field label="부서">
+            <SelectInput value={d.department} onChange={(e) => setD({ ...d, department: e.target.value })}>
+              <option value="">미지정</option>
+              {deptSel.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="직급">
+            <SelectInput value={d.job_rank} onChange={(e) => setD({ ...d, job_rank: e.target.value })}>
+              <option value="">미지정</option>
+              {rankSel.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="직책">
+            <SelectInput value={d.job_title} onChange={(e) => setD({ ...d, job_title: e.target.value })}>
+              <option value="">미지정</option>
+              {titleSel.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </SelectInput>
+          </Field>
         </FormSection>
 
         {/* 2. 급여·계좌 */}
         <FormSection no={2} title="급여 · 계좌">
           <Field label="입사일"><TextInput type="date" value={d.hired_on} onChange={(e) => setD({ ...d, hired_on: e.target.value })} /></Field>
           <div />
-          <Field label="기본급 (월, 원)"><TextInput inputMode="numeric" value={d.base_salary} onChange={(e) => setD({ ...d, base_salary: e.target.value })} placeholder="2,800,000" /></Field>
-          <Field label="시급 (원)"><TextInput inputMode="numeric" value={d.hourly_wage} onChange={(e) => setD({ ...d, hourly_wage: e.target.value })} placeholder="12,000" /></Field>
+          <Field label="기본급 (월, 원)"><NumberInput value={d.base_salary} onChange={(v) => setD({ ...d, base_salary: v })} placeholder="2,800,000" /></Field>
+          <Field label="시급 (원)"><NumberInput value={d.hourly_wage} onChange={(v) => setD({ ...d, hourly_wage: v })} placeholder="12,000" /></Field>
           <Field label="은행명"><TextInput value={d.bank_name} onChange={(e) => setD({ ...d, bank_name: e.target.value })} placeholder="국민·신한 등" /></Field>
           <Field label="계좌번호"><TextInput value={d.account_number} onChange={(e) => setD({ ...d, account_number: e.target.value })} placeholder="숫자만" /></Field>
           <Field label="예금주"><TextInput value={d.account_holder} onChange={(e) => setD({ ...d, account_holder: e.target.value })} placeholder="본인과 다를 경우" /></Field>
@@ -2086,13 +2233,13 @@ function EditModal({
           </div>
           <Field label="비상연락처"><TextInput value={d.emergency_contact} onChange={(e) => setD({ ...d, emergency_contact: e.target.value })} placeholder="010-0000-0000" /></Field>
           <Field label="비상연락 관계"><TextInput value={d.emergency_relation} onChange={(e) => setD({ ...d, emergency_relation: e.target.value })} placeholder="배우자·부모 등" /></Field>
-          <Field label="부양가족 수 (본인 포함)"><TextInput inputMode="numeric" value={d.dependents} onChange={(e) => setD({ ...d, dependents: e.target.value })} placeholder="1" /></Field>
-          <Field label="20세 이하 자녀 수"><TextInput inputMode="numeric" value={d.children_under20} onChange={(e) => setD({ ...d, children_under20: e.target.value })} placeholder="0" /></Field>
+          <Field label="부양가족 수 (본인 포함)"><NumberInput value={d.dependents} onChange={(v) => setD({ ...d, dependents: v })} placeholder="1" /></Field>
+          <Field label="20세 이하 자녀 수"><NumberInput value={d.children_under20} onChange={(v) => setD({ ...d, children_under20: v })} placeholder="0" /></Field>
         </FormSection>
 
         {/* 4. 근로조건 */}
         <FormSection no={4} title="근로조건">
-          <Field label="주 소정근로시간 (h)"><TextInput inputMode="numeric" value={d.weekly_hours} onChange={(e) => setD({ ...d, weekly_hours: e.target.value })} placeholder="40" /></Field>
+          <Field label="주 소정근로시간 (h)"><NumberInput value={d.weekly_hours} onChange={(v) => setD({ ...d, weekly_hours: v })} placeholder="40" /></Field>
           <Field label="근무요일"><TextInput value={d.work_days} onChange={(e) => setD({ ...d, work_days: e.target.value })} placeholder="월~금" /></Field>
           <Field label="근무 시작"><TextInput value={d.work_start} onChange={(e) => setD({ ...d, work_start: e.target.value })} placeholder="09:00" /></Field>
           <Field label="근무 종료"><TextInput value={d.work_end} onChange={(e) => setD({ ...d, work_end: e.target.value })} placeholder="18:00" /></Field>
@@ -2120,6 +2267,24 @@ function EditModal({
             />
           </div>
         </FormSection>
+
+        {/* 7. 로그인 계정 (수정 모드 전용 — 직원이 존재해야 발급 가능) */}
+        <FormSection no={7} title="로그인 계정" desc="직원이 본인 아이디·비밀번호로 로그인(개인 페이지 /me)">
+          <div className={colSpan2}>
+            {mode === "edit" && emp ? (
+              <AccountPanel
+                employee={emp}
+                info={accountInfo ?? null}
+                roles={roles}
+                onSaved={() => onAccountChanged?.()}
+              />
+            ) : (
+              <p className="rounded-lg bg-neutral-100 px-3 py-3 text-sm text-neutral-500">
+                먼저 직원을 <b>저장</b>한 뒤, 목록에서 다시 열면 여기서 아이디·비밀번호를 발급할 수 있습니다.
+              </p>
+            )}
+          </div>
+        </FormSection>
       </div>
 
       {error && <p className="bg-neutral-50 px-5 pb-1 text-sm text-rose-600">{error}</p>}
@@ -2133,17 +2298,16 @@ function EditModal({
   );
 }
 
-function AccountModal({
+// 로그인 계정 발급·관리 패널 — AccountModal(독립 모달)과 EditModal(수정 모달 내 섹션) 공용
+function AccountPanel({
   employee,
   info,
   roles,
-  onClose,
   onSaved,
 }: {
   employee: EmployeeRow;
   info: AccountInfo | null;
   roles: { key: string; label: string }[];
-  onClose: () => void;
   onSaved: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -2151,7 +2315,7 @@ function AccountModal({
   // 발급 폼
   const [username, setUsername] = useState(employee.name ?? "");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<AppRole>("MEMBER");
+  const [role, setRole] = useState<AppRole>("EMPLOYEE");
   // 관리 폼
   const [newPw, setNewPw] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
@@ -2197,6 +2361,89 @@ function AccountModal({
     });
   }
 
+  if (!info) {
+    return (
+      <div className="space-y-3">
+        <Field label="아이디" required>
+          <TextInput value={username} onChange={(e) => setUsername(e.target.value)} placeholder="로그인 아이디" />
+        </Field>
+        <Field label="비밀번호 (4자 이상)" required>
+          <TextInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="임시 비밀번호" />
+        </Field>
+        <Field label="권한(등급)">
+          <SelectInput value={role} onChange={(e) => setRole(e.target.value as AppRole)}>
+            {roles.map((r) => (
+              <option key={r.key} value={r.key}>{r.label}</option>
+            ))}
+          </SelectInput>
+        </Field>
+        <p className="text-xs text-neutral-400">
+          직원은 이 <b>아이디</b>와 비밀번호로 로그인합니다(이메일 불필요).
+        </p>
+        {error && <p className="text-sm text-rose-600">{error}</p>}
+        <div className="flex justify-end">
+          <button
+            onClick={issue}
+            disabled={pending || !username.trim() || password.length < 4}
+            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+          >
+            {pending ? "발급 중…" : "계정 발급"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg bg-neutral-50 p-3 text-sm">
+        <span className="text-neutral-500">아이디</span>{" "}
+        <span className="font-semibold">{info.username ?? "(이메일 로그인)"}</span>
+      </div>
+      <Field label="권한(등급)">
+        <SelectInput value={info.role} disabled={pending} onChange={(e) => changeRole(e.target.value as AppRole)}>
+          {!roles.some((r) => r.key === info.role) && <option value={info.role}>{info.role}</option>}
+          {roles.map((r) => (
+            <option key={r.key} value={r.key}>{r.label}</option>
+          ))}
+        </SelectInput>
+      </Field>
+      <div>
+        <Field label="비밀번호 재설정 (4자 이상)">
+          <div className="flex gap-2">
+            <TextInput value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="새 비밀번호" />
+            <button
+              onClick={resetPw}
+              disabled={pending || newPw.length < 4}
+              className="shrink-0 rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+            >
+              변경
+            </button>
+          </div>
+        </Field>
+        {msg && <p className="mt-1 text-xs text-emerald-600">{msg}</p>}
+      </div>
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+      <button onClick={revoke} disabled={pending} className="text-sm text-rose-500 hover:text-rose-700">
+        계정 해제(삭제)
+      </button>
+    </div>
+  );
+}
+
+function AccountModal({
+  employee,
+  info,
+  roles,
+  onClose,
+  onSaved,
+}: {
+  employee: EmployeeRow;
+  info: AccountInfo | null;
+  roles: { key: string; label: string }[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/30 p-4">
       <div className="mt-16 w-full max-w-sm rounded-xl border border-neutral-200 bg-white shadow-xl">
@@ -2208,83 +2455,9 @@ function AccountModal({
             ✕
           </button>
         </div>
-
-        {!info ? (
-          <div className="space-y-3 p-5">
-            <Field label="아이디" required>
-              <TextInput value={username} onChange={(e) => setUsername(e.target.value)} placeholder="로그인 아이디" />
-            </Field>
-            <Field label="비밀번호 (4자 이상)" required>
-              <TextInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="임시 비밀번호" />
-            </Field>
-            <Field label="권한(등급)">
-              <SelectInput value={role} onChange={(e) => setRole(e.target.value as AppRole)}>
-                {roles.map((r) => (
-                  <option key={r.key} value={r.key}>{r.label}</option>
-                ))}
-              </SelectInput>
-            </Field>
-            <p className="text-xs text-neutral-400">
-              직원은 이 <b>아이디</b>와 비밀번호로 로그인합니다(이메일 불필요).
-            </p>
-            {error && <p className="text-sm text-rose-600">{error}</p>}
-          </div>
-        ) : (
-          <div className="space-y-4 p-5">
-            <div className="rounded-lg bg-neutral-50 p-3 text-sm">
-              <span className="text-neutral-500">아이디</span>{" "}
-              <span className="font-semibold">{info.username ?? "(이메일 로그인)"}</span>
-            </div>
-            <Field label="권한(등급)">
-              <SelectInput
-                value={info.role}
-                disabled={pending}
-                onChange={(e) => changeRole(e.target.value as AppRole)}
-              >
-                {!roles.some((r) => r.key === info.role) && (
-                  <option value={info.role}>{info.role}</option>
-                )}
-                {roles.map((r) => (
-                  <option key={r.key} value={r.key}>{r.label}</option>
-                ))}
-              </SelectInput>
-            </Field>
-            <div>
-              <Field label="비밀번호 재설정 (4자 이상)">
-                <div className="flex gap-2">
-                  <TextInput value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="새 비밀번호" />
-                  <button
-                    onClick={resetPw}
-                    disabled={pending || newPw.length < 4}
-                    className="shrink-0 rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
-                  >
-                    변경
-                  </button>
-                </div>
-              </Field>
-              {msg && <p className="mt-1 text-xs text-emerald-600">{msg}</p>}
-            </div>
-            {error && <p className="text-sm text-rose-600">{error}</p>}
-            <button onClick={revoke} disabled={pending} className="text-sm text-rose-500 hover:text-rose-700">
-              계정 해제(삭제)
-            </button>
-          </div>
-        )}
-
-        {!info && (
-          <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
-            <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">
-              취소
-            </button>
-            <button
-              onClick={issue}
-              disabled={pending}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
-            >
-              {pending ? "발급 중…" : "계정 발급"}
-            </button>
-          </div>
-        )}
+        <div className="p-5">
+          <AccountPanel employee={employee} info={info} roles={roles} onSaved={onSaved} />
+        </div>
       </div>
     </div>
   );

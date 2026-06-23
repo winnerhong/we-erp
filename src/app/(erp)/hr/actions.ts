@@ -198,10 +198,28 @@ export async function generatePayrolls(
   const employees = (emps ?? []) as EmployeeRow[];
   const have = new Set(((existing ?? []) as { employee_id: string }[]).map((p) => p.employee_id));
 
+  // 시급제 자동계산용: 그 달 근태 실근무시간(분) 합계
+  const empIds = employees.map((e) => e.id);
+  const workMin = new Map<string, number>();
+  if (empIds.length > 0) {
+    const { data: att } = await supabase
+      .from("attendance")
+      .select("employee_id, work_minutes")
+      .in("employee_id", empIds)
+      .gte("work_date", `${yearMonth}-01`)
+      .lte("work_date", `${yearMonth}-31`);
+    for (const a of (att ?? []) as { employee_id: string; work_minutes: number | null }[])
+      workMin.set(a.employee_id, (workMin.get(a.employee_id) ?? 0) + (a.work_minutes ?? 0));
+  }
+
   const rows = employees
     .filter((e) => !have.has(e.id))
     .map((e) => {
-      const base = e.base_salary ?? 0; // 시급제는 0 → 검수에서 입력
+      // 시급제: 근태 실근무시간 × 시급. 그 외: 기본급(시급제 근태 없으면 0 → 검수에서 입력)
+      const base =
+        e.employment_type === "HOURLY" && e.hourly_wage
+          ? Math.round((e.hourly_wage * (workMin.get(e.id) ?? 0)) / 60)
+          : e.base_salary ?? 0;
       const insurance = estimateInsurance(base).total;
       return {
         company_id: companyId,

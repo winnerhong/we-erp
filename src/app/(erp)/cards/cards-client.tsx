@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, Field, TextInput, SelectInput } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput, SelectInput } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
 import { BankTradeTabs } from "@/components/bank-trade-tabs";
@@ -1004,7 +1004,7 @@ function CardModal({
             </SelectInput>
           </Field>
           <Field label="결제일 (1~31)">
-            <TextInput inputMode="numeric" value={d.billing_day} onChange={(e) => setD({ ...d, billing_day: e.target.value })} placeholder="예: 25" />
+            <NumberInput value={d.billing_day} onChange={(v) => setD({ ...d, billing_day: v })} placeholder="예: 25" />
           </Field>
         </div>
         {error && <p className="px-5 pb-1 text-sm text-rose-600">{error}</p>}

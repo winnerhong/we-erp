@@ -2,6 +2,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureSelf } from "@/lib/auth-guard";
 import { toPaybackBrief, type PaybackBrief } from "@/components/payback-list";
 import { MeClient } from "./me-client";
+import { kstToday } from "@/lib/attendance";
+import type { VarCompany, VarLabels } from "@/lib/document-vars";
 import type {
   PayrollRow,
   LeaveRequestRow,
@@ -10,6 +12,10 @@ import type {
   EmployeeDocumentRow,
   EmployeeEventRow,
   PaybackRow,
+  DocumentTemplateRow,
+  DocumentIssueRow,
+  FieldOptionRow,
+  AttendanceRow,
 } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "내 정보" };
@@ -45,8 +51,59 @@ export default async function MePage() {
     db.from("employee_documents").select("*").eq("employee_id", emp.id).order("created_at", { ascending: false }),
     db.from("employee_events").select("*").eq("employee_id", emp.id).order("event_date", { ascending: false }),
     db.from("paybacks").select("*").eq("employee_id", emp.id).order("created_at", { ascending: false }),
-    emp.company_id ? db.from("companies").select("name").eq("id", emp.company_id).maybeSingle() : Promise.resolve({ data: null }),
+    emp.company_id
+      ? db.from("companies").select("id, name, biz_no, ceo_name, address, biz_type, biz_category").eq("id", emp.company_id).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+
+  // 서류 — 양식(전사 공용) + 본인 발행본 + 변수 라벨
+  const [{ data: tpls }, { data: docIssues }, { data: foRows }] = await Promise.all([
+    db.from("document_templates").select("*").eq("is_active", true).order("sort_order").order("created_at"),
+    db.from("document_issues").select("*").eq("employee_id", emp.id).order("created_at", { ascending: false }),
+    db.from("field_options").select("*").in("category", ["employment_type", "job_rank", "job_title", "department"]),
+  ]);
+  const labelOf = (cat: string): Record<string, string> =>
+    Object.fromEntries(((foRows ?? []) as FieldOptionRow[]).filter((o) => o.category === cat).map((o) => [o.value, o.label]));
+  const docLabels: VarLabels = {
+    employment_type: labelOf("employment_type"),
+    job_rank: labelOf("job_rank"),
+    job_title: labelOf("job_title"),
+  };
+  // 프로필 표시용 라벨 + 로그인 아이디
+  const empTypeLabel = labelOf("employment_type")[emp.employment_type ?? ""] ?? emp.employment_type ?? "";
+  const deptLabel = labelOf("department")[emp.department ?? ""] ?? emp.department ?? "";
+  const titleLabel = labelOf("job_title")[emp.job_title ?? ""] ?? emp.job_title ?? "";
+  const rankLabel = labelOf("job_rank")[emp.job_rank ?? ""] ?? emp.job_rank ?? "";
+  const username = g.profile?.username ?? null;
+
+  // 근태 — 최근 8주 출퇴근 기록(주간/월간 뷰 공용) + 오늘
+  const today = kstToday();
+  const windowStart = new Date(`${today}T00:00:00`);
+  windowStart.setDate(windowStart.getDate() - 56);
+  const winStart = windowStart.toISOString().slice(0, 10);
+  const { data: attRows } = await db
+    .from("attendance")
+    .select("*")
+    .eq("employee_id", emp.id)
+    .gte("work_date", winStart)
+    .order("work_date", { ascending: false });
+  const attendance = (attRows ?? []) as AttendanceRow[];
+  const todayAtt = attendance.find((a) => a.work_date === today) ?? null;
+
+  // 최근 8주 승인 휴가 날짜(근태에 '휴가'로 표시)
+  const leaveDates: string[] = [];
+  for (const l of (leaves ?? []) as LeaveRequestRow[]) {
+    if (l.status !== "APPROVED") continue;
+    const s = l.start_date < winStart ? winStart : l.start_date;
+    const ed = l.end_date > today ? today : l.end_date;
+    for (let dt = new Date(`${s}T00:00:00`); dt <= new Date(`${ed}T00:00:00`); dt.setDate(dt.getDate() + 1))
+      leaveDates.push(dt.toISOString().slice(0, 10));
+  }
+
+  const co = company as ({ id: string } & VarCompany) | null;
+  const docCompany: VarCompany | null = co
+    ? { name: co.name, biz_no: co.biz_no, ceo_name: co.ceo_name, address: co.address, biz_type: co.biz_type, biz_category: co.biz_category }
+    : null;
 
   // 포인트(페이백) — 출처 거래일·적요 보강
   const pbRows = (pbs ?? []) as PaybackRow[];
@@ -73,6 +130,15 @@ export default async function MePage() {
       docs={(docs ?? []) as EmployeeDocumentRow[]}
       events={(events ?? []) as EmployeeEventRow[]}
       paybacks={paybacks}
+      templates={(tpls ?? []) as DocumentTemplateRow[]}
+      issues={(docIssues ?? []) as DocumentIssueRow[]}
+      company={docCompany}
+      labels={docLabels}
+      attendance={attendance}
+      todayAtt={todayAtt}
+      today={today}
+      leaveDates={leaveDates}
+      profile={{ username, empTypeLabel, deptLabel, titleLabel, rankLabel }}
     />
   );
 }

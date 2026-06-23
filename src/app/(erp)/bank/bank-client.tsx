@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, Field, TextInput } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
 import { BankTradeTabs } from "@/components/bank-trade-tabs";
@@ -121,11 +121,6 @@ const num = (s: string) => {
   return s.trim() === "" || !Number.isFinite(n) ? 0 : n;
 };
 
-/** 숫자 문자열을 천단위 콤마로 표시(입력칸용). 빈값은 빈문자. */
-const commaFmt = (s: string) => {
-  const digits = s.replace(/[^\d]/g, "");
-  return digits ? Number(digits).toLocaleString("en-US") : "";
-};
 
 /** "YYYY-MM" 을 delta 개월 이동. */
 function shiftMonth(m: string, delta: number): string {
@@ -1025,12 +1020,11 @@ function PaybackModal({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <p className="mb-1 text-xs font-medium text-neutral-500">페이백 총액</p>
-                <input
-                  inputMode="numeric"
+                <NumberInput
                   value={gross}
-                  onChange={(e) => setGross(e.target.value)}
+                  onChange={(v) => setGross(v)}
                   placeholder="700,000"
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
+                  className="w-full"
                 />
               </div>
               <div>
@@ -1647,17 +1641,15 @@ function TaxFromTxnModal({
             <TextInput type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} />
           </Field>
           <Field label="공급가액">
-            <TextInput
-              inputMode="numeric"
-              value={commaFmt(supply)}
-              onChange={(e) => setSupply(e.target.value.replace(/[^\d]/g, ""))}
+            <NumberInput
+              value={supply}
+              onChange={(v) => setSupply(v.replace(/[^\d]/g, ""))}
             />
           </Field>
           <Field label="세액">
-            <TextInput
-              inputMode="numeric"
-              value={commaFmt(vat)}
-              onChange={(e) => setVat(e.target.value.replace(/[^\d]/g, ""))}
+            <NumberInput
+              value={vat}
+              onChange={(v) => setVat(v.replace(/[^\d]/g, ""))}
             />
           </Field>
           <Field label="합계">
@@ -1761,10 +1753,9 @@ function AccountModal({
         </Field>
         <div className="col-span-2">
           <Field label="기초잔액(거래내역 시작 전 잔액)">
-            <TextInput
-              inputMode="numeric"
+            <NumberInput
               value={d.opening_balance}
-              onChange={(e) => setD({ ...d, opening_balance: e.target.value })}
+              onChange={(v) => setD({ ...d, opening_balance: v })}
             />
           </Field>
         </div>
@@ -1879,11 +1870,10 @@ function TxnModal({
         </Field>
         <div className="col-span-2">
           <Field label="금액" required>
-            <TextInput
-              inputMode="numeric"
+            <NumberInput
               placeholder="1,000,000"
               value={d.amount}
-              onChange={(e) => setD({ ...d, amount: e.target.value })}
+              onChange={(v) => setD({ ...d, amount: v })}
             />
           </Field>
         </div>

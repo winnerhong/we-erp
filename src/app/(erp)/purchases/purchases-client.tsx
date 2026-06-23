@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, Field, TextInput, SelectInput, EmptyState, Badge } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput, SelectInput, EmptyState, Badge } from "@/components/ui";
 import {
   PURCHASE_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
@@ -783,8 +783,8 @@ function RequestModal({
           )}
 
           <div className="grid grid-cols-3 gap-3">
-            <Field label="단가"><TextInput inputMode="numeric" value={d.unit_price} onChange={(e) => setD({ ...d, unit_price: e.target.value })} /></Field>
-            <Field label="수량"><TextInput inputMode="numeric" value={d.quantity} onChange={(e) => setD({ ...d, quantity: e.target.value })} /></Field>
+            <Field label="단가"><NumberInput value={d.unit_price} onChange={(v) => setD({ ...d, unit_price: v })} /></Field>
+            <Field label="수량"><NumberInput value={d.quantity} onChange={(v) => setD({ ...d, quantity: v })} /></Field>
             <Field label="합계"><TextInput value={krw(amount)} readOnly className="bg-neutral-50" /></Field>
           </div>
 

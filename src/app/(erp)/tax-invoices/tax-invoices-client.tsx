@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card, Field, TextInput, SelectInput, EmptyState, Badge } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput, SelectInput, EmptyState, Badge } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
 import { TAX_INVOICE_TYPE_LABEL, taxInvoiceStatusLabel, krw } from "@/lib/labels";
 import type {
@@ -420,10 +420,10 @@ function TaxInvoiceModal({
               <option value="DONE">{taxInvoiceStatusLabel(type, "DONE")}</option>
             </SelectInput>
           </Field>
-          <Field label="공급가액"><TextInput inputMode="numeric" value={d.supply_amount} onChange={(e) => onSupply(e.target.value)} /></Field>
-          <Field label="세액"><TextInput inputMode="numeric" value={d.vat_amount} onChange={(e) => setD({ ...d, vat_amount: e.target.value })} /></Field>
+          <Field label="공급가액"><NumberInput value={d.supply_amount} onChange={(v) => onSupply(v)} /></Field>
+          <Field label="세액"><NumberInput value={d.vat_amount} onChange={(v) => setD({ ...d, vat_amount: v })} /></Field>
           <div className="col-span-2">
-            <Field label="합계"><TextInput inputMode="numeric" value={d.total_amount} onChange={(e) => setD({ ...d, total_amount: e.target.value })} /></Field>
+            <Field label="합계"><NumberInput value={d.total_amount} onChange={(v) => setD({ ...d, total_amount: v })} /></Field>
           </div>
           <div className="col-span-2">
             <Field label="메모"><TextInput value={d.memo} onChange={(e) => setD({ ...d, memo: e.target.value })} /></Field>

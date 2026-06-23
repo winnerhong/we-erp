@@ -89,6 +89,9 @@ export interface EmployeeRow extends Timestamps {
   sync_snapshot: Record<string, string | null> | null;
   profile_id: string | null; // 연결된 로그인 계정(profiles.id)
   nickname: string | null;
+  department: string | null; // field_options(category=department) 부서
+  job_rank: string | null;   // field_options(category=job_rank) 직급
+  job_title: string | null;  // field_options(category=job_title) 직책
   photo_url: string | null;
   bank_name: string | null;
   account_number: string | null;
@@ -96,6 +99,10 @@ export interface EmployeeRow extends Timestamps {
   // 인사기록
   birth: string | null;
   resident_no: string | null;
+  name_en: string | null;       // 영문이름
+  nationality: string | null;   // 국적
+  gender: string | null;        // 성별
+  hr_extra: Record<string, unknown> | null; // 인사카드 반복항목(가족·학력·경력·자격)
   address: string | null;
   emergency_contact: string | null;
   emergency_relation: string | null;
@@ -155,6 +162,63 @@ export interface EmployeeEventRow {
   event_type: string | null;
   title: string | null;
   detail: string | null;
+  created_at: string;
+}
+
+export interface DailyRecordRow {
+  id: string;
+  company_id: string;
+  record_date: string;
+  kind: "SALES" | "EXPENSE";
+  category: string | null;        // field_options(sales_category | expense_category)
+  payment_method: string | null;  // CASH | CARD | TRANSFER | OTHER
+  amount: number;
+  qty: number | null;
+  memo: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AttendanceRow {
+  id: string;
+  company_id: string | null;
+  employee_id: string;
+  work_date: string;
+  check_in: string | null;
+  check_out: string | null;
+  work_minutes: number | null;
+  status: string;     // NORMAL/LATE/EARLY/LATE_EARLY/ABSENT/LEAVE
+  work_mode: string;  // OFFICE/REMOTE/FIELD/TRIP
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentTemplateRow {
+  id: string;
+  name: string;
+  category: string | null;
+  body: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentIssueRow {
+  id: string;
+  template_id: string | null;
+  company_id: string | null;
+  employee_id: string;
+  title: string;
+  rendered_body: string;
+  field_values: Record<string, string>;
+  status: "DRAFT" | "ISSUED" | "SIGNED";
+  signed_file: string | null;
+  issued_on: string;
+  signed_on: string | null;
+  memo: string | null;
+  created_by: string | null;
   created_at: string;
 }
 

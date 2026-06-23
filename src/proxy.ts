@@ -45,10 +45,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 직원 셀프 서비스(/me)는 누구나(로그인) 접근 — 본인 데이터만 보임
+  // 직원 셀프 서비스(/me)·서류 인쇄(/print)는 누구나(로그인) 접근
   const isMe = path === "/me" || path.startsWith("/me/");
+  const isPrint = path.startsWith("/print/");
 
-  if (user && !isLogin && !isMe) {
+  if (user && !isLogin && !isMe && !isPrint) {
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
     const role = (profile as { role: string } | null)?.role;
     const menu = MENUS.find((m) => m.href !== "/" && (path === m.href || path.startsWith(m.href + "/")));

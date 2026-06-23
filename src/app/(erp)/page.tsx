@@ -69,6 +69,15 @@ export default async function DashboardPage() {
 
   const companies = (companiesRes.data ?? []) as { id: string; name: string }[];
 
+  // 오늘 근태 요약
+  let attTodayQ = supabase.from("attendance").select("status, check_in, check_out").eq("work_date", today);
+  if (filter) attTodayQ = attTodayQ.eq("company_id", filter);
+  const { data: attTodayData } = await attTodayQ;
+  const attRows = (attTodayData ?? []) as { status: string; check_in: string | null; check_out: string | null }[];
+  const attWorked = attRows.filter((a) => a.check_in).length;
+  const attLate = attRows.filter((a) => a.status === "LATE" || a.status === "LATE_EARLY").length;
+  const attOut = attRows.filter((a) => a.check_out).length;
+
   // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용
   let settledQ = supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null);
   if (filter) settledQ = settledQ.eq("company_id", filter);
@@ -210,6 +219,32 @@ export default async function DashboardPage() {
               tone={total.payable > 0 ? "red" : undefined}
             />
           </div>
+
+          {/* 오늘 근태 */}
+          <div className="mt-7 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-neutral-700">오늘 근태</h2>
+            <Link href="/attendance" className="text-xs text-indigo-600 hover:underline">근태현황 전체 →</Link>
+          </div>
+          <Link href="/attendance" className="mt-2 block">
+            <Card className="flex flex-wrap items-center gap-x-8 gap-y-3 p-4 hover:bg-neutral-50">
+              <div>
+                <p className="text-xs text-neutral-500">출근</p>
+                <p className="mt-0.5 text-lg font-bold tabular text-emerald-600">{attWorked}<span className="text-sm font-normal text-neutral-400">/{empCnt.count ?? 0}명</span></p>
+              </div>
+              <div>
+                <p className="text-xs text-neutral-500">퇴근</p>
+                <p className="mt-0.5 text-lg font-bold tabular text-neutral-800">{attOut}명</p>
+              </div>
+              <div>
+                <p className="text-xs text-neutral-500">지각</p>
+                <p className="mt-0.5 text-lg font-bold tabular text-amber-600">{attLate}명</p>
+              </div>
+              <div>
+                <p className="text-xs text-neutral-500">미출근</p>
+                <p className="mt-0.5 text-lg font-bold tabular text-rose-500">{Math.max(0, (empCnt.count ?? 0) - attWorked)}명</p>
+              </div>
+            </Card>
+          </Link>
 
           {/* 최근 6개월 추세 */}
           <h2 className="mb-2 mt-7 text-sm font-semibold text-neutral-700">최근 6개월 추세</h2>

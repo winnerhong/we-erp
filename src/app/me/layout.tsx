@@ -20,7 +20,7 @@ export default async function MeLayout({ children }: { children: React.ReactNode
           </form>
         </div>
       </header>
-      <main className="mx-auto max-w-4xl p-5">{children}</main>
+      <main className="mx-auto max-w-6xl p-5">{children}</main>
     </div>
   );
 }

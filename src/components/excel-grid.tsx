@@ -45,6 +45,18 @@ interface Props<T> {
 
 const DEFAULT_W = 130;
 
+/** 입력 문자열을 천단위 콤마로 포맷(소수점·음수 보존). 예: "75000" → "75,000", "0.1" → "0.1" */
+function formatThousands(s: string): string {
+  const neg = s.trim().startsWith("-");
+  const cleaned = s.replace(/[^\d.]/g, "");
+  if (cleaned === "") return neg ? "-" : "";
+  const dot = cleaned.indexOf(".");
+  const intRaw = dot === -1 ? cleaned : cleaned.slice(0, dot);
+  const decRaw = dot === -1 ? "" : "." + cleaned.slice(dot + 1).replace(/\./g, "");
+  const intFmt = intRaw === "" ? "" : Number(intRaw).toLocaleString("en-US");
+  return (neg ? "-" : "") + intFmt + decRaw;
+}
+
 function loadJSON<V>(key: string, fallback: V): V {
   if (typeof window === "undefined") return fallback;
   try {
@@ -225,12 +237,19 @@ export function ExcelGrid<T>({
       // 표시 라벨 → 옵션 value 로 매핑(초기 선택)
       const cur = cellText(c, r);
       setEditVal(c.options?.find((o) => o.label === cur)?.value ?? "");
+    } else if (c.edit === "number") {
+      setEditVal(formatThousands(cellText(c, r)));
     } else {
       setEditVal(cellText(c, r));
     }
   }
   function commit() {
-    if (editing && onEdit) onEdit(editing.id, editing.key, editVal);
+    if (editing && onEdit) {
+      // 숫자 컬럼은 콤마 제거 후 전달(서버/DB 는 순수 숫자만)
+      const col = colMap.get(editing.key);
+      const out = col?.edit === "number" ? editVal.replace(/,/g, "") : editVal;
+      onEdit(editing.id, editing.key, out);
+    }
     setEditing(null);
   }
 
@@ -464,7 +483,9 @@ export function ExcelGrid<T>({
                                 type={c.edit === "number" ? "text" : c.edit}
                                 inputMode={c.edit === "number" ? "numeric" : undefined}
                                 value={editVal}
-                                onChange={(e) => setEditVal(e.target.value)}
+                                onChange={(e) =>
+                                  setEditVal(c.edit === "number" ? formatThousands(e.target.value) : e.target.value)
+                                }
                                 onBlur={commit}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") commit();

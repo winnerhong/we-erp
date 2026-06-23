@@ -7,7 +7,7 @@ import { OptionsManager } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
 import { PaybackList, type PaybackBrief } from "@/components/payback-list";
-import { Card, Field, TextInput, SelectInput, Badge, EmptyState, FormSection } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput, SelectInput, Badge, EmptyState, FormSection } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
 import type { PartnerRow, FieldOptionRow } from "@/lib/supabase/database.types";
@@ -791,7 +791,7 @@ function PartnerEditModal({
             </SelectInput>
           </Field>
           <Field label="기본 부가세율(%)">
-            <TextInput inputMode="numeric" value={d.default_tax_rate} onChange={(e) => setD({ ...d, default_tax_rate: e.target.value })} placeholder="비우면 10%, 면세는 0" />
+            <NumberInput value={d.default_tax_rate} onChange={(v) => setD({ ...d, default_tax_rate: v })} placeholder="비우면 10%, 면세는 0" />
           </Field>
           <div className="col-span-2">
             <Field label="기본 계정과목">

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, Field, TextInput, SelectInput, EmptyState, Badge } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput, SelectInput, EmptyState, Badge } from "@/components/ui";
 import {
   RECEIPT_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
@@ -294,9 +294,9 @@ function ReviewModal({
             </div>
             <Field label="사업자번호"><TextInput value={d.biz_no} onChange={(e) => setD({ ...d, biz_no: e.target.value })} /></Field>
             <Field label="거래일자"><TextInput type="date" value={d.doc_date} onChange={(e) => setD({ ...d, doc_date: e.target.value })} /></Field>
-            <Field label="공급가액"><TextInput inputMode="numeric" value={d.supply_amount} onChange={(e) => setD({ ...d, supply_amount: e.target.value })} /></Field>
-            <Field label="부가세"><TextInput inputMode="numeric" value={d.vat_amount} onChange={(e) => setD({ ...d, vat_amount: e.target.value })} /></Field>
-            <Field label="합계"><TextInput inputMode="numeric" value={d.total_amount} onChange={(e) => setD({ ...d, total_amount: e.target.value })} /></Field>
+            <Field label="공급가액"><NumberInput value={d.supply_amount} onChange={(v) => setD({ ...d, supply_amount: v })} /></Field>
+            <Field label="부가세"><NumberInput value={d.vat_amount} onChange={(v) => setD({ ...d, vat_amount: v })} /></Field>
+            <Field label="합계"><NumberInput value={d.total_amount} onChange={(v) => setD({ ...d, total_amount: v })} /></Field>
             <Field label="결제수단">
               <SelectInput value={d.payment_method} onChange={(e) => setD({ ...d, payment_method: e.target.value as PaymentMethod })}>
                 <option value="">선택…</option>

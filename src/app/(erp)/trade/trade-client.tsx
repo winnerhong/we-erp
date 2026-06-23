@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, Field, TextInput, SelectInput, EmptyState, Badge } from "@/components/ui";
+import { Card, Field, TextInput, NumberInput, SelectInput, EmptyState, Badge } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import type { TaxInvoiceRow } from "@/lib/supabase/database.types";
 import { createTrade, updateTrade, deleteTrade, linkInvoiceToBankTxn, unlinkInvoiceBank } from "./actions";
@@ -503,9 +503,9 @@ function AddTradeModal({
             </SelectInput>
           </Field>
         </div>
-        <Field label="공급가액"><TextInput inputMode="numeric" value={d.supply} onChange={(e) => onSupply(e.target.value)} /></Field>
-        <Field label="세액"><TextInput inputMode="numeric" value={d.vat} onChange={(e) => setD({ ...d, vat: e.target.value })} /></Field>
-        <Field label="합계"><TextInput inputMode="numeric" value={d.total} onChange={(e) => setD({ ...d, total: e.target.value })} /></Field>
+        <Field label="공급가액"><NumberInput value={d.supply} onChange={(v) => onSupply(v)} /></Field>
+        <Field label="세액"><NumberInput value={d.vat} onChange={(v) => setD({ ...d, vat: v })} /></Field>
+        <Field label="합계"><NumberInput value={d.total} onChange={(v) => setD({ ...d, total: v })} /></Field>
         <Field label="결제예정일"><TextInput type="date" value={d.due_date} onChange={(e) => setD({ ...d, due_date: e.target.value })} /></Field>
         <div className="col-span-2">
           <Field label="메모"><TextInput value={d.memo} onChange={(e) => setD({ ...d, memo: e.target.value })} /></Field>

@@ -19,3 +19,91 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* ===== 서류 본문(미리보기·인쇄·에디터 공용) ===== */
+.doc-content {
+  font-size: 15px;
+  line-height: 1.9;
+  color: #1f2937;
+  word-break: keep-all;
+  font-family: "Pretendard", "Malgun Gothic", -apple-system, sans-serif;
+}
+.doc-content h1 {
+  font-size: 1.75em;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.45em;
+  margin: 0.2em 0 0.55em;
+  padding-bottom: 0.35em;
+  border-bottom: 3px double #334155;
+}
+.doc-content h2 { font-size: 1.2em; font-weight: 700; margin: 1em 0 0.4em; padding-left: 0.4em; border-left: 4px solid #4f46e5; }
+.doc-content h3 { font-size: 1.05em; font-weight: 700; margin: 0.8em 0 0.3em; }
+.doc-content p { margin: 0.5em 0; }
+.doc-content ul { list-style: disc; padding-left: 1.4em; margin: 0.4em 0; }
+.doc-content ol { list-style: decimal; padding-left: 1.4em; margin: 0.4em 0; }
+.doc-content strong { font-weight: 700; }
+.doc-content u { text-decoration: underline; }
+.doc-content table { border-collapse: collapse; width: 100%; margin: 0.9em 0; font-size: 0.97em; }
+.doc-content th, .doc-content td { border: 1px solid #cbd5e1; padding: 9px 13px; vertical-align: middle; }
+.doc-content th { background: #f1f5f9; font-weight: 700; text-align: center; white-space: nowrap; color: #334155; }
+.doc-content td { line-height: 1.7; }
+.doc-content blockquote { border-left: 3px solid #d1d5db; padding-left: 0.8em; color: #4b5563; margin: 0.6em 0; }
+.doc-content pre { background: #1f2937; color: #f3f4f6; padding: 10px 12px; border-radius: 6px; overflow-x: auto; font-family: ui-monospace, monospace; font-size: 0.9em; margin: 0.6em 0; }
+.doc-content code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-family: ui-monospace, monospace; font-size: 0.92em; }
+.doc-content pre code { background: transparent; padding: 0; color: inherit; }
+.doc-content ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
+.doc-content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.45em; }
+.doc-content ul[data-type="taskList"] li > label { margin: 0.2em 0 0; }
+.doc-content ul[data-type="taskList"] li > div { flex: 1; }
+/* 서명/도장 줄 등 여백용 */
+.doc-content hr { border: none; border-top: 1px solid #d1d5db; margin: 1.2em 0; }
+/* 입력칸 포커스 시 미리보기 강조 */
+.doc-content mark.doc-hl {
+  background: #fde68a;
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 2px;
+  box-shadow: 0 0 0 2px #f59e0b88;
+  animation: doc-hl-pulse 1s ease;
+}
+@keyframes doc-hl-pulse {
+  0% { background: #fbbf24; }
+  100% { background: #fde68a; }
+}
+
+/* 편집 영역을 한 단계 작게 표시(보기 편하게 축소) */
+.doc-editor-zoom { zoom: 0.8; }
+/* 발행 모달 등 좁은 미리보기 — 더 작게 */
+.doc-preview-zoom { zoom: 0.5; }
+
+/* Tiptap 편집 영역 */
+.doc-content:focus { outline: none; }
+.ProseMirror { min-height: 50vh; outline: none; }
+.ProseMirror .selectedCell { background: #dbeafe66; }
+/* 이미지 */
+.doc-content img { max-width: 100%; height: auto; border-radius: 2px; }
+.ProseMirror img.ProseMirror-selectednode { outline: 2px solid #6366f1; }
+/* 표 열 너비 조절(드래그 핸들) — 잡기 쉽게 넓고 잘 보이게 */
+.ProseMirror table { table-layout: fixed; width: 100%; }
+.ProseMirror th, .ProseMirror td { position: relative; }
+.ProseMirror .column-resize-handle {
+  position: absolute; right: -3px; top: 0; bottom: -2px; width: 6px;
+  background: #6366f1; opacity: 0.45; border-radius: 3px; pointer-events: none; z-index: 6;
+}
+.ProseMirror table:hover .column-resize-handle { opacity: 0.9; }
+.ProseMirror.resize-cursor { cursor: col-resize; }
+/* 모든 셀 경계에 살짝 안내(마우스 올리면 더 진하게) */
+.ProseMirror.doc-content td:hover::after,
+.ProseMirror.doc-content th:hover::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 6px;
+  background: #6366f133; pointer-events: none;
+}
+.tableWrapper { overflow-x: auto; }
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
