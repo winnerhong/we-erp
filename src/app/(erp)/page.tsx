@@ -78,6 +78,14 @@ export default async function DashboardPage() {
   const attLate = attRows.filter((a) => a.status === "LATE" || a.status === "LATE_EARLY").length;
   const attOut = attRows.filter((a) => a.check_out).length;
 
+  // 업무 요약(미완료 중 지연·오늘 마감)
+  let taskQ = supabase.from("tasks").select("status, due_date").neq("status", "DONE");
+  if (filter) taskQ = taskQ.eq("company_id", filter);
+  const { data: taskData } = await taskQ;
+  const openTasks = (taskData ?? []) as { status: string; due_date: string | null }[];
+  const taskOverdue = openTasks.filter((t) => t.due_date && t.due_date < today).length;
+  const taskToday = openTasks.filter((t) => t.due_date === today).length;
+
   // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용
   let settledQ = supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null);
   if (filter) settledQ = settledQ.eq("company_id", filter);
@@ -242,6 +250,28 @@ export default async function DashboardPage() {
               <div>
                 <p className="text-xs text-neutral-500">미출근</p>
                 <p className="mt-0.5 text-lg font-bold tabular text-rose-500">{Math.max(0, (empCnt.count ?? 0) - attWorked)}명</p>
+              </div>
+            </Card>
+          </Link>
+
+          {/* 오늘 업무 */}
+          <div className="mt-7 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-neutral-700">업무</h2>
+            <Link href="/calendar" className="text-xs text-indigo-600 hover:underline">업무캘린더 →</Link>
+          </div>
+          <Link href="/calendar" className="mt-2 block">
+            <Card className="flex flex-wrap items-center gap-x-8 gap-y-3 p-4 hover:bg-neutral-50">
+              <div>
+                <p className="text-xs text-neutral-500">미완료</p>
+                <p className="mt-0.5 text-lg font-bold tabular text-neutral-800">{openTasks.length}건</p>
+              </div>
+              <div>
+                <p className="text-xs text-neutral-500">오늘 마감</p>
+                <p className="mt-0.5 text-lg font-bold tabular text-amber-600">{taskToday}건</p>
+              </div>
+              <div>
+                <p className="text-xs text-neutral-500">지연</p>
+                <p className="mt-0.5 text-lg font-bold tabular text-rose-500">{taskOverdue}건</p>
               </div>
             </Card>
           </Link>

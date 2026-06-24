@@ -92,6 +92,7 @@ export interface EmployeeRow extends Timestamps {
   department: string | null; // field_options(category=department) 부서
   job_rank: string | null;   // field_options(category=job_rank) 직급
   job_title: string | null;  // field_options(category=job_title) 직책
+  is_manager: boolean;       // 매니저(부서장) — 업무 배정 권한
   photo_url: string | null;
   bank_name: string | null;
   account_number: string | null;
@@ -458,6 +459,91 @@ export interface FieldOptionRow {
   link_type: string | null; // 'employee'=직원 연동 / null=거래처(기본)
 }
 
+// ---------------- 업무공유캘린더 ----------------
+export type TaskStatus = "TODO" | "DOING" | "DONE" | "HOLD";
+export type TaskPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+
+export interface TaskRow {
+  id: string;
+  company_id: string | null;
+  title: string;
+  description: string | null;
+  category: string | null;        // field_options 'task_category'
+  status: string;                 // TaskStatus
+  priority: string;               // TaskPriority
+  start_date: string | null;
+  due_date: string | null;
+  all_day: boolean;
+  start_time: string | null;      // 'HH:MM'
+  end_time: string | null;        // 'HH:MM'
+  progress: number;               // 0~100
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskAssigneeRow {
+  task_id: string;
+  employee_id: string;
+  created_at: string;
+}
+
+export interface TaskCommentRow {
+  id: string;
+  task_id: string;
+  author_id: string | null;
+  author_name: string | null;
+  body: string;
+  created_at: string;
+}
+
+export interface TaskChecklistRow {
+  id: string;
+  task_id: string;
+  label: string;
+  done: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+// ---------------- 자료실 ----------------
+export type LibraryVisibility = "ALL" | "COMPANY" | "DEPT";
+
+export interface LibraryFolderRow {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface LibraryFileRow {
+  id: string;
+  folder_id: string | null;
+  title: string;
+  description: string | null;
+  file_name: string;
+  mime: string | null;
+  size_bytes: number;
+  storage_path: string;
+  version: number;
+  visibility: string;          // LibraryVisibility
+  company_id: string | null;
+  department: string | null;
+  uploaded_by: string | null;
+  uploader_name: string | null;
+  download_count: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LibraryFavoriteRow {
+  profile_id: string;
+  file_id: string;
+  created_at: string;
+}
+
 type TableShape<Row, RequiredInsert extends keyof Row> = {
   Row: Row;
   Insert: Partial<Row> & Pick<Row, RequiredInsert>;
@@ -502,6 +588,13 @@ export interface Database {
         CardTransactionRow,
         "card_id" | "company_id" | "txn_date"
       >;
+      tasks: TableShape<TaskRow, "title">;
+      task_assignees: TableShape<TaskAssigneeRow, "task_id" | "employee_id">;
+      task_comments: TableShape<TaskCommentRow, "task_id" | "body">;
+      task_checklist: TableShape<TaskChecklistRow, "task_id" | "label">;
+      library_folders: TableShape<LibraryFolderRow, "name">;
+      library_files: TableShape<LibraryFileRow, "title" | "file_name" | "storage_path">;
+      library_favorites: TableShape<LibraryFavoriteRow, "profile_id" | "file_id">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

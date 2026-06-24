@@ -34,6 +34,26 @@ export async function ensureAdmin(): Promise<Guard> {
   return g;
 }
 
+export interface ManagerGuard {
+  profile?: ProfileRow;
+  /** 본인 직원 레코드(있으면). ADMIN 은 직원 레코드 없이도 통과. */
+  employee?: EmployeeRow | null;
+  isAdmin?: boolean;
+  error?: string;
+}
+
+/** 업무 배정 권한 보장 — ADMIN 이거나, is_manager=true 인 직원. */
+export async function ensureManager(): Promise<ManagerGuard> {
+  const g = await ensureUser();
+  if (g.error) return { error: g.error };
+  if (g.profile!.role === "ADMIN") return { profile: g.profile, isAdmin: true, employee: null };
+  const db = createAdminClient();
+  const { data } = await db.from("employees").select("*").eq("profile_id", g.profile!.id).maybeSingle();
+  const employee = data as EmployeeRow | null;
+  if (!employee?.is_manager) return { error: "업무 배정 권한이 없습니다(관리자·매니저 전용)." };
+  return { profile: g.profile, isAdmin: false, employee };
+}
+
 export interface SelfGuard {
   profile?: ProfileRow;
   employee?: EmployeeRow;

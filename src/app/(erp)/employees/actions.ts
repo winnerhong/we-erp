@@ -1,10 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { ensureAdmin } from "@/lib/auth-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { runTeacherSync, type SyncResult } from "@/lib/wks-sync";
 import { importTeacherAccounts, empEmail, type AccountImportResult } from "@/lib/account-sync";
 import type { AppRole } from "@/lib/supabase/database.types";
@@ -39,33 +37,19 @@ export interface AccountResult {
   error?: string;
 }
 
-/**
- * 직원 계정으로 전환 로그인(관리자 임퍼소네이트).
- * 매직링크 토큰을 생성해 현재 세션을 그 직원으로 교체 → /me 로 이동.
- * 관리자 화면으로 돌아가려면 로그아웃 후 본인 계정으로 다시 로그인.
- */
-export async function loginAsEmployee(employeeId: string): Promise<{ error?: string }> {
+// 직원 전환 로그인(임퍼소네이트)은 새 탭에서 열기 위해 GET 라우트로 이동:
+//   src/app/(erp)/employees/impersonate/[id]/route.ts
+
+/** 직원 매니저(부서장) 지정/해제 — 업무 배정 권한. */
+export async function setEmployeeManager(employeeId: string, isManager: boolean): Promise<AccountResult> {
   const g = await ensureAdmin();
-  if (g.error) return { error: g.error };
-  const admin = createAdminClient();
-
-  const { data: emp } = await admin.from("employees").select("profile_id").eq("id", employeeId).maybeSingle();
-  const profileId = (emp as { profile_id: string | null } | null)?.profile_id;
-  if (!profileId) return { error: "이 직원은 로그인 계정이 없습니다. 먼저 ‘계정·비번’으로 발급하세요." };
-
-  const { data: prof } = await admin.from("profiles").select("email").eq("id", profileId).maybeSingle();
-  const email = (prof as { email: string | null } | null)?.email;
-  if (!email) return { error: "계정 이메일을 찾을 수 없습니다." };
-
-  const { data: link, error: lErr } = await admin.auth.admin.generateLink({ type: "magiclink", email });
-  const tokenHash = link?.properties?.hashed_token;
-  if (lErr || !tokenHash) return { error: lErr?.message ?? "로그인 토큰 생성 실패" };
-
-  const supabase = await createClient();
-  const { error: vErr } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: "magiclink" });
-  if (vErr) return { error: vErr.message };
-
-  redirect("/me");
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { error } = await db.from("employees").update({ is_manager: isManager } as never).eq("id", employeeId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/employees");
+  revalidatePath("/calendar");
+  return { ok: true };
 }
 
 /** 직원에게 로그인 계정 발급(아이디·비번). 가상 이메일로 합성. */

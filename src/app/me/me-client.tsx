@@ -28,8 +28,33 @@ import { requestLeave, cancelMyLeave, issueMyCertificate, clockIn, clockOut, set
 import { createMyIssue, saveMySignedFile, deleteMyIssue } from "@/app/(erp)/documents/actions";
 import { HrCardEditor } from "@/components/hr-card-editor";
 import { normalizeHrExtra, HR_SCALAR_FIELDS, type HrScalarField } from "@/lib/hr-card";
+import {
+  createTask, setTaskStatus, addTaskComment, deleteTaskComment,
+  addChecklistItem, toggleChecklistItem, deleteChecklistItem,
+} from "@/app/(erp)/calendar/actions";
+import {
+  TASK_STATUS_LABEL, TASK_STATUS_TONE, TASK_STATUSES, toneChip, isOverdue, isDueSoon,
+  monthDays, dowOf, shiftMonth, DOW_KR, taskRange, addDays as addDaysT,
+} from "@/lib/tasks";
+import { OrgChart, type OrgEmployee } from "@/components/org-chart";
+import { LibraryBrowser, type LibFile, type LibFolder } from "@/components/library-browser";
 
-type Tab = "att" | "info" | "pay" | "point" | "leave" | "docs" | "history";
+type Tab = "att" | "task" | "org" | "library" | "info" | "pay" | "point" | "leave" | "docs" | "history";
+
+export interface MyTask {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  status: string;
+  priority: string;
+  start_date: string | null;
+  due_date: string | null;
+  progress: number;
+  checklist: { id: string; label: string; done: boolean }[];
+  comments: { id: string; author_id: string | null; author_name: string | null; body: string; created_at: string }[];
+}
+export interface MeIds { employeeId: string; profileId: string | null }
 
 export function MeClient({
   employee,
@@ -50,6 +75,14 @@ export function MeClient({
   today,
   leaveDates,
   profile,
+  myTasks,
+  taskCategories,
+  meIds,
+  orgEmployees,
+  orgCompanyName,
+  libFiles,
+  libFolders,
+  libFavorites,
 }: {
   employee: EmployeeRow;
   companyName: string | null;
@@ -69,7 +102,16 @@ export function MeClient({
   today: string;
   leaveDates: string[];
   profile: MeProfile;
+  myTasks: MyTask[];
+  taskCategories: { value: string; label: string; color: string | null }[];
+  meIds: MeIds;
+  orgEmployees: OrgEmployee[];
+  orgCompanyName: string;
+  libFiles: LibFile[];
+  libFolders: LibFolder[];
+  libFavorites: string[];
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("att");
   const emp = employee;
   const todayLeave = leaveDates.includes(today) && !todayAtt?.check_in;
@@ -102,6 +144,27 @@ export function MeClient({
         {/* 우측 콘텐츠 */}
         <main className="min-w-0 space-y-4">
         {tab === "att" && <AttendanceContent today={today} rows={attendance} leaveDates={leaveDates} />}
+        {tab === "task" && <MyTasksTab tasks={myTasks} categories={taskCategories} meIds={meIds} today={today} />}
+        {tab === "org" && (
+          <section className="space-y-3">
+            <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-3">
+              <h3 className="font-semibold text-neutral-800">🏢 {orgCompanyName} 조직도</h3>
+              <p className="mt-0.5 text-xs text-neutral-400">같은 사업자 동료 · 부서별</p>
+            </div>
+            {orgEmployees.length === 0
+              ? <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-12 text-center text-sm text-neutral-400">표시할 동료가 없습니다.</p>
+              : <OrgChart companies={[{ id: emp.company_id ?? "x", name: orgCompanyName }]} employees={orgEmployees} />}
+          </section>
+        )}
+        {tab === "library" && (
+          <section className="space-y-3">
+            <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-3">
+              <h3 className="font-semibold text-neutral-800">📚 자료실</h3>
+              <p className="mt-0.5 text-xs text-neutral-400">회사 업무자료 다운로드</p>
+            </div>
+            <LibraryBrowser folders={libFolders} files={libFiles} favorites={libFavorites} canManage={false} onRefresh={() => router.refresh()} />
+          </section>
+        )}
         {tab === "info" && (
           <HrCardEditor
             initialScalars={hrScalars(emp)}
@@ -132,6 +195,9 @@ interface MeProfile {
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "att", label: "근태", icon: "🕘" },
+  { key: "task", label: "내 업무", icon: "✅" },
+  { key: "org", label: "조직도", icon: "🏢" },
+  { key: "library", label: "자료실", icon: "📚" },
   { key: "info", label: "내 정보", icon: "🧾" },
   { key: "pay", label: "급여 명세", icon: "💰" },
   { key: "point", label: "포인트", icon: "⭐" },
@@ -139,6 +205,276 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "docs", label: "서류", icon: "📄" },
   { key: "history", label: "인사이력", icon: "📌" },
 ];
+
+// ===== 내 업무(업무캘린더 연동) =====
+function MyTasksTab({
+  tasks, categories, meIds, today,
+}: {
+  tasks: MyTask[];
+  categories: { value: string; label: string; color: string | null }[];
+  meIds: MeIds;
+  today: string;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "cal">("list");
+  const [calMonth, setCalMonth] = useState(today.slice(0, 7));
+  const [selected, setSelected] = useState<MyTask | null>(null);
+  const [title, setTitle] = useState("");
+  const [due, setDue] = useState("");
+  const [cat, setCat] = useState("");
+  const catColor = new Map(categories.map((c) => [c.value, c.color ?? "neutral"]));
+
+  // selected 가 가리키는 최신 task(새로고침 후 갱신 반영)
+  const selectedLive = selected ? tasks.find((t) => t.id === selected.id) ?? null : null;
+
+  const run = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
+    startTransition(async () => { const r = await fn(); if (!r.ok) alert(r.error); else router.refresh(); });
+
+  function addTask(e: React.FormEvent) {
+    e.preventDefault();
+    if (!title.trim()) return;
+    run(async () => {
+      const r = await createTask({ title, due_date: due || null, category: cat || null });
+      if (r.ok) { setTitle(""); setDue(""); setCat(""); }
+      return r;
+    });
+  }
+
+  const open = tasks.filter((t) => t.status !== "DONE");
+  const done = tasks.filter((t) => t.status === "DONE");
+  const overdue = open.filter((t) => isOverdue(t.due_date, t.status, today)).length;
+
+  return (
+    <div className="space-y-4">
+      {/* 새 업무 추가 */}
+      <section className="rounded-2xl border border-neutral-200 bg-white p-4">
+        <h3 className="mb-3 font-semibold text-neutral-800">✅ 내 업무 추가</h3>
+        <form onSubmit={addTask} className="flex flex-wrap gap-2">
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="할 일을 입력하세요"
+            className="min-w-[180px] flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none" />
+          <select value={cat} onChange={(e) => setCat(e.target.value)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm">
+            <option value="">분류</option>
+            {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm" />
+          <button disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">추가</button>
+        </form>
+      </section>
+
+      {/* 요약 + 보기 전환 */}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="rounded-lg bg-neutral-100 px-3 py-1 font-medium text-neutral-600">미완료 {open.length}</span>
+        {overdue > 0 && <span className="rounded-lg bg-rose-100 px-3 py-1 font-medium text-rose-600">지연 {overdue}</span>}
+        <span className="rounded-lg bg-emerald-50 px-3 py-1 font-medium text-emerald-600">완료 {done.length}</span>
+        <div className="ml-auto flex rounded-lg border border-neutral-200 bg-white p-1">
+          {([["list", "📋 목록"], ["cal", "📅 캘린더"]] as const).map(([k, lbl]) => (
+            <button key={k} onClick={() => setView(k)} className={`rounded-md px-3 py-1 font-medium ${view === k ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>{lbl}</button>
+          ))}
+        </div>
+      </div>
+
+      {view === "list" ? (
+        <>
+          <section className="space-y-2">
+            {open.length === 0 && <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-sm text-neutral-400">진행할 업무가 없습니다. 위에서 추가해 보세요.</p>}
+            {open.map((t) => (
+              <MyTaskCard key={t.id} t={t} catColor={catColor} meIds={meIds} today={today}
+                expanded={openId === t.id} onToggle={() => setOpenId((p) => (p === t.id ? null : t.id))} run={run} pending={pending} />
+            ))}
+          </section>
+          {done.length > 0 && (
+            <section>
+              <h4 className="mb-2 text-sm font-semibold text-neutral-400">완료됨</h4>
+              <div className="space-y-2">
+                {done.map((t) => (
+                  <MyTaskCard key={t.id} t={t} catColor={catColor} meIds={meIds} today={today}
+                    expanded={openId === t.id} onToggle={() => setOpenId((p) => (p === t.id ? null : t.id))} run={run} pending={pending} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      ) : (
+        <MyMonthCalendar tasks={tasks} month={calMonth} today={today} catColor={catColor}
+          onPrev={() => setCalMonth((m) => shiftMonth(m, -1))}
+          onNext={() => setCalMonth((m) => shiftMonth(m, 1))}
+          onToday={() => setCalMonth(today.slice(0, 7))}
+          onTask={(t) => setSelected(t)} />
+      )}
+
+      {/* 캘린더에서 업무 클릭 → 상세 모달 */}
+      {selectedLive && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" onClick={() => setSelected(null)}>
+          <div className="my-auto w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex justify-end">
+              <button onClick={() => setSelected(null)} className="rounded-full bg-white/90 px-3 py-1 text-sm font-medium text-neutral-600 shadow hover:bg-white">닫기 ✕</button>
+            </div>
+            <MyTaskCard t={selectedLive} catColor={catColor} meIds={meIds} today={today}
+              expanded onToggle={() => {}} run={run} pending={pending} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 내 업무 월 달력
+function MyMonthCalendar({
+  tasks, month, today, catColor, onPrev, onNext, onToday, onTask,
+}: {
+  tasks: MyTask[];
+  month: string;
+  today: string;
+  catColor: Map<string, string>;
+  onPrev: () => void;
+  onNext: () => void;
+  onToday: () => void;
+  onTask: (t: MyTask) => void;
+}) {
+  const days = monthDays(month);
+  const lead = dowOf(days[0]);
+  const cells: (string | null)[] = [...Array(lead).fill(null), ...days];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const byDay = new Map<string, MyTask[]>();
+  for (const t of tasks) {
+    const r = taskRange(t.start_date, t.due_date);
+    if (!r) continue;
+    for (let d = r.start; d <= r.end; d = addDaysT(d, 1)) {
+      if (d.slice(0, 7) !== month) continue;
+      const arr = byDay.get(d) ?? [];
+      arr.push(t);
+      byDay.set(d, arr);
+    }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+      <div className="flex items-center gap-1 border-b border-neutral-100 p-2">
+        <button onClick={onPrev} className="rounded px-2 py-1 text-sm hover:bg-neutral-100">‹</button>
+        <button onClick={onToday} className="rounded px-2 py-1 text-sm font-semibold tabular-nums hover:bg-neutral-100">{month.replace("-", ".")}</button>
+        <button onClick={onNext} className="rounded px-2 py-1 text-sm hover:bg-neutral-100">›</button>
+      </div>
+      <div className="grid grid-cols-7 border-b border-neutral-100 text-center text-xs font-semibold text-neutral-400">
+        {DOW_KR.map((d, i) => (
+          <div key={d} className={`py-2 ${i === 0 ? "text-rose-400" : i === 6 ? "text-blue-400" : ""}`}>{d}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {cells.map((d, i) => {
+          if (!d) return <div key={i} className="min-h-[88px] border-b border-r border-neutral-50 bg-neutral-50/40" />;
+          const list = byDay.get(d) ?? [];
+          const isToday = d === today;
+          const wd = i % 7;
+          return (
+            <div key={i} className="min-h-[88px] border-b border-r border-neutral-50 p-1.5">
+              <div className={`mb-1 text-right text-xs font-semibold tabular-nums ${isToday ? "inline-block rounded-full bg-neutral-900 px-1.5 text-white" : wd === 0 ? "text-rose-400" : wd === 6 ? "text-blue-400" : "text-neutral-500"}`}>
+                {Number(d.slice(8))}
+              </div>
+              <div className="space-y-1">
+                {list.slice(0, 3).map((t) => (
+                  <button key={t.id} onClick={() => onTask(t)}
+                    className={`block w-full truncate rounded border px-1.5 py-0.5 text-left text-[11px] font-medium ${toneChip(catColor.get(t.category ?? "") ?? "neutral")} ${t.status === "DONE" ? "line-through opacity-50" : ""}`}>
+                    {t.priority === "URGENT" && "🔴 "}{t.title}
+                  </button>
+                ))}
+                {list.length > 3 && <div className="px-1 text-[10px] text-neutral-400">+{list.length - 3}건</div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MyTaskCard({
+  t, catColor, meIds, today, expanded, onToggle, run, pending,
+}: {
+  t: MyTask;
+  catColor: Map<string, string>;
+  meIds: MeIds;
+  today: string;
+  expanded: boolean;
+  onToggle: () => void;
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>) => void;
+  pending: boolean;
+}) {
+  const [chk, setChk] = useState("");
+  const [cmt, setCmt] = useState("");
+  const od = isOverdue(t.due_date, t.status, today);
+  const soon = isDueSoon(t.due_date, t.status, today);
+  const doneN = t.checklist.filter((c) => c.done).length;
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white">
+      <div className="flex items-center gap-3 p-3">
+        <div className="min-w-0 flex-1 cursor-pointer" onClick={onToggle}>
+          <div className="flex items-center gap-1.5">
+            {t.category && <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${toneChip(catColor.get(t.category) ?? "neutral")}`}>{t.category}</span>}
+            {t.priority === "URGENT" && <span className="text-xs">🔴</span>}
+            <span className={`truncate text-sm font-medium ${t.status === "DONE" ? "text-neutral-400 line-through" : "text-neutral-800"}`}>{t.title}</span>
+          </div>
+          <div className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-400">
+            {t.due_date && <span className={`tabular-nums font-medium ${od ? "text-rose-500" : soon ? "text-amber-500" : ""}`}>~{t.due_date.slice(5).replace("-", "/")}</span>}
+            {t.checklist.length > 0 && <span>☑ {doneN}/{t.checklist.length}</span>}
+            {t.comments.length > 0 && <span>💬 {t.comments.length}</span>}
+          </div>
+        </div>
+        <select value={t.status} disabled={pending} onChange={(e) => run(() => setTaskStatus(t.id, e.target.value))}
+          className={`rounded-lg border px-2 py-1 text-xs font-medium ${toneChip(TASK_STATUS_TONE[t.status as keyof typeof TASK_STATUS_TONE] ?? "neutral")}`}>
+          {TASK_STATUSES.map((s) => <option key={s} value={s}>{TASK_STATUS_LABEL[s]}</option>)}
+        </select>
+      </div>
+
+      {expanded && (
+        <div className="space-y-3 border-t border-neutral-100 p-3">
+          {t.description && <p className="whitespace-pre-wrap rounded-lg bg-neutral-50 p-2.5 text-sm text-neutral-600">{t.description}</p>}
+
+          {/* 체크리스트 */}
+          <div>
+            <div className="mb-1 text-xs font-semibold text-neutral-500">체크리스트</div>
+            <div className="space-y-1">
+              {t.checklist.map((c) => (
+                <div key={c.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={c.done} disabled={pending} onChange={(e) => run(() => toggleChecklistItem(c.id, e.target.checked))} />
+                  <span className={c.done ? "text-neutral-400 line-through" : "text-neutral-700"}>{c.label}</span>
+                  <button onClick={() => run(() => deleteChecklistItem(c.id))} className="ml-auto text-xs text-neutral-300 hover:text-rose-500">✕</button>
+                </div>
+              ))}
+            </div>
+            <form className="mt-1.5" onSubmit={(e) => { e.preventDefault(); if (chk.trim()) { run(() => addChecklistItem(t.id, chk)); setChk(""); } }}>
+              <input value={chk} onChange={(e) => setChk(e.target.value)} placeholder="+ 항목 추가" className="w-full rounded-lg border border-neutral-200 px-2.5 py-1.5 text-sm" />
+            </form>
+          </div>
+
+          {/* 댓글 */}
+          <div>
+            <div className="mb-1 text-xs font-semibold text-neutral-500">댓글</div>
+            <div className="space-y-1.5">
+              {t.comments.map((c) => (
+                <div key={c.id} className="rounded-lg bg-neutral-50 px-3 py-2 text-sm">
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className="font-medium text-neutral-700">{c.author_name ?? "사용자"}</span>
+                    <span className="text-[10px] text-neutral-400">{c.created_at.slice(5, 16).replace("T", " ")}</span>
+                    {c.author_id === meIds.profileId && <button onClick={() => run(() => deleteTaskComment(c.id))} className="ml-auto text-xs text-neutral-300 hover:text-rose-500">삭제</button>}
+                  </div>
+                  <div className="whitespace-pre-wrap text-neutral-700">{c.body}</div>
+                </div>
+              ))}
+            </div>
+            <form className="mt-1.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (cmt.trim()) { run(() => addTaskComment(t.id, cmt)); setCmt(""); } }}>
+              <input value={cmt} onChange={(e) => setCmt(e.target.value)} placeholder="댓글 입력…" className="flex-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-sm" />
+              <button disabled={pending} className="rounded-lg bg-neutral-800 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">등록</button>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // 이미지 파일 → 정사각 축소 data URL(JPEG)
 function resizeImage(file: File, max: number): Promise<string> {

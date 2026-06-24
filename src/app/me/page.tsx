@@ -1,7 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureSelf } from "@/lib/auth-guard";
 import { toPaybackBrief, type PaybackBrief } from "@/components/payback-list";
-import { MeClient } from "./me-client";
+import { MeClient, type MyTask } from "./me-client";
+import type { OrgEmployee } from "@/components/org-chart";
+import type { LibFile, LibFolder } from "@/components/library-browser";
+import { fileVisibleTo } from "@/lib/library";
+import type { LibraryFileRow, LibraryFolderRow, LibraryFavoriteRow } from "@/lib/supabase/database.types";
 import { kstToday } from "@/lib/attendance";
 import type { VarCompany, VarLabels } from "@/lib/document-vars";
 import type {
@@ -16,6 +20,9 @@ import type {
   DocumentIssueRow,
   FieldOptionRow,
   AttendanceRow,
+  TaskRow,
+  TaskChecklistRow,
+  TaskCommentRow,
 } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "내 정보" };
@@ -119,6 +126,72 @@ export default async function MePage() {
   }
   const paybacks: PaybackBrief[] = pbRows.map((p) => toPaybackBrief(p, pbDate, pbDesc));
 
+  // 내 업무(담당 배정된 업무) + 체크리스트·댓글 + 업무 분류
+  const { data: asg } = await db.from("task_assignees").select("task_id").eq("employee_id", emp.id);
+  const myTaskIds = [...new Set(((asg ?? []) as { task_id: string }[]).map((a) => a.task_id))];
+  let myTasks: MyTask[] = [];
+  const { data: taskCats } = await db
+    .from("field_options").select("value, label, color").eq("category", "task_category").eq("is_active", true).order("sort_order");
+  if (myTaskIds.length > 0) {
+    const [{ data: tk }, { data: ck }, { data: cm }] = await Promise.all([
+      db.from("tasks").select("*").in("id", myTaskIds).order("due_date", { nullsFirst: false }),
+      db.from("task_checklist").select("*").in("task_id", myTaskIds).order("sort_order"),
+      db.from("task_comments").select("*").in("task_id", myTaskIds).order("created_at"),
+    ]);
+    const chkBy = new Map<string, TaskChecklistRow[]>();
+    for (const c of (ck ?? []) as TaskChecklistRow[]) { const a = chkBy.get(c.task_id) ?? []; a.push(c); chkBy.set(c.task_id, a); }
+    const cmtBy = new Map<string, TaskCommentRow[]>();
+    for (const c of (cm ?? []) as TaskCommentRow[]) { const a = cmtBy.get(c.task_id) ?? []; a.push(c); cmtBy.set(c.task_id, a); }
+    myTasks = ((tk ?? []) as TaskRow[]).map((t) => ({
+      id: t.id, title: t.title, description: t.description, category: t.category,
+      status: t.status, priority: t.priority, start_date: t.start_date, due_date: t.due_date, progress: t.progress,
+      checklist: (chkBy.get(t.id) ?? []).map((c) => ({ id: c.id, label: c.label, done: c.done })),
+      comments: (cmtBy.get(t.id) ?? []).map((c) => ({ id: c.id, author_id: c.author_id, author_name: c.author_name, body: c.body, created_at: c.created_at })),
+    }));
+  }
+
+  // 조직도 — 같은 사업자 동료(읽기전용)
+  let orgEmployees: OrgEmployee[] = [];
+  if (emp.company_id) {
+    const { data: coworkers } = await db
+      .from("employees")
+      .select("id, name, company_id, department, job_rank, job_title, is_manager, photo_url, phone, email, hired_on")
+      .eq("is_active", true)
+      .eq("company_id", emp.company_id)
+      .order("name");
+    const fo = (foRows ?? []) as FieldOptionRow[];
+    const lbl = (cat: string, v: string | null) => (v ? fo.find((o) => o.category === cat && o.value === v)?.label ?? v : null);
+    const rankSort = (v: string | null) => (v ? fo.find((o) => o.category === "job_rank" && o.value === v)?.sort_order ?? 999 : 999);
+    orgEmployees = ((coworkers ?? []) as typeof emp[]).map((e) => ({
+      id: e.id, name: e.name, photoUrl: e.photo_url ?? null, companyId: e.company_id ?? null,
+      deptValue: e.department ?? null, deptLabel: lbl("department", e.department ?? null),
+      rankLabel: lbl("job_rank", e.job_rank ?? null), rankSort: rankSort(e.job_rank ?? null),
+      titleLabel: lbl("job_title", e.job_title ?? null), isManager: e.is_manager,
+      phone: e.phone ?? null, email: e.email ?? null, hiredOn: e.hired_on ?? null,
+    }));
+  }
+
+  // 자료실 — 이 직원에게 보이는 파일(공개범위) + 폴더 + 즐겨찾기
+  const [{ data: libFolders }, { data: libFilesRaw }, { data: libFavs }] = await Promise.all([
+    db.from("library_folders").select("*").order("sort_order"),
+    db.from("library_files").select("*").eq("is_active", true).order("created_at", { ascending: false }),
+    db.from("library_favorites").select("file_id").eq("profile_id", g.profile!.id),
+  ]);
+  const empScope = { company_id: emp.company_id, department: emp.department };
+  const orgCoName = (company as { name: string } | null)?.name ?? null;
+  const libFiles: LibFile[] = ((libFilesRaw ?? []) as LibraryFileRow[])
+    .filter((f) => emp.is_manager || fileVisibleTo(f, empScope))
+    .map((f) => ({
+      id: f.id, folderId: f.folder_id, title: f.title, description: f.description,
+      fileName: f.file_name, mime: f.mime, size: f.size_bytes, version: f.version,
+      visibility: f.visibility, companyId: f.company_id,
+      companyName: f.company_id && f.company_id === emp.company_id ? orgCoName : null,
+      department: f.department, departmentLabel: f.department ? labelOf("department")[f.department] ?? f.department : null,
+      uploaderName: f.uploader_name, downloadCount: f.download_count, createdAt: f.created_at, updatedAt: f.updated_at,
+    }));
+  const libFolderRows: LibFolder[] = ((libFolders ?? []) as LibraryFolderRow[]).map((f) => ({ id: f.id, name: f.name, parentId: f.parent_id }));
+  const libFavorites = ((libFavs ?? []) as LibraryFavoriteRow[]).map((f) => f.file_id);
+
   return (
     <MeClient
       employee={emp}
@@ -139,6 +212,14 @@ export default async function MePage() {
       today={today}
       leaveDates={leaveDates}
       profile={{ username, empTypeLabel, deptLabel, titleLabel, rankLabel }}
+      myTasks={myTasks}
+      taskCategories={(taskCats ?? []) as { value: string; label: string; color: string | null }[]}
+      meIds={{ employeeId: emp.id, profileId: g.profile?.id ?? null }}
+      orgEmployees={orgEmployees}
+      orgCompanyName={(company as { name: string } | null)?.name ?? "우리 회사"}
+      libFiles={libFiles}
+      libFolders={libFolderRows}
+      libFavorites={libFavorites}
     />
   );
 }

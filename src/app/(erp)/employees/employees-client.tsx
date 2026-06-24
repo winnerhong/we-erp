@@ -52,7 +52,7 @@ import {
   resetEmployeePassword,
   setEmployeeAccountRole,
   revokeEmployeeAccount,
-  loginAsEmployee,
+  setEmployeeManager,
 } from "./actions";
 
 export interface AccountInfo {
@@ -414,16 +414,25 @@ export function EmployeesClient({
               <div className="mt-4 flex flex-wrap gap-2">
                 <HeaderBtn onClick={() => setEditFor(selected)}>✏️ 수정</HeaderBtn>
                 <HeaderBtn onClick={() => setAcctFor(selected)}>🔑 계정·비번</HeaderBtn>
+                <HeaderBtn
+                  onClick={() => {
+                    const next = !selected.is_manager;
+                    void setEmployeeManager(selected.id, next).then((r) => {
+                      if (r?.error) alert(r.error);
+                      else refresh();
+                    });
+                  }}
+                >
+                  {selected.is_manager ? "✅ 매니저" : "☆ 매니저 지정"}
+                </HeaderBtn>
                 {accounts[selected.id] && (
                   <HeaderBtn
                     onClick={() => {
-                      if (!confirm(`${selected.name} 직원 계정으로 전환 로그인합니다.\n\n관리자 화면으로 돌아가려면 로그아웃 후 본인 계정으로 다시 로그인하세요. 계속할까요?`)) return;
-                      void loginAsEmployee(selected.id).then((r) => {
-                        if (r?.error) alert(r.error);
-                      });
+                      if (!confirm(`${selected.name} 직원 계정으로 새 탭에서 전환 로그인합니다.\n\n⚠️ 세션은 브라우저 전체에 공유되어, 이 관리자 탭도 새로고침하면 직원으로 바뀝니다.\n관리자로 돌아가려면 로그아웃 후 본인 계정으로 다시 로그인하세요. 계속할까요?`)) return;
+                      window.open(`/employees/impersonate/${selected.id}`, "_blank", "noopener");
                     }}
                   >
-                    👤 직원 로그인
+                    👤 직원 로그인(새 탭)
                   </HeaderBtn>
                 )}
                 <HeaderBtn
