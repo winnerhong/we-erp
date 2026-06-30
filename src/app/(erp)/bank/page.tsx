@@ -72,18 +72,11 @@ export default async function BankPage({
   let accountTxnCount = 0;
   let accountLatestDate: string | null = null;
   if (account) {
-    const { count } = await supabase
-      .from("bank_transactions")
-      .select("*", { count: "exact", head: true })
-      .eq("bank_account_id", account.id);
+    const [{ count }, { data: latest }] = await Promise.all([
+      supabase.from("bank_transactions").select("*", { count: "exact", head: true }).eq("bank_account_id", account.id),
+      supabase.from("bank_transactions").select("txn_date").eq("bank_account_id", account.id).order("txn_date", { ascending: false }).limit(1).maybeSingle(),
+    ]);
     accountTxnCount = count ?? 0;
-    const { data: latest } = await supabase
-      .from("bank_transactions")
-      .select("txn_date")
-      .eq("bank_account_id", account.id)
-      .order("txn_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
     accountLatestDate = (latest as { txn_date: string } | null)?.txn_date ?? null;
   }
 
@@ -99,61 +92,45 @@ export default async function BankPage({
     if (filter) q = q.or(`company_id.eq.${filter},company_id.is.null`);
     return q;
   };
-  let partners: PartnerOpt[] = [];
-  const { data: partnerData, error: partnerErr } = await partnerScope("id, name, default_tax_rate");
+  // 직원/카드/영수증 — 사업자 스코프 빌더
+  let empQuery = supabase.from("employees").select("id, name, company_id").eq("is_active", true).order("name");
+  if (filter) empQuery = empQuery.eq("company_id", filter);
+  let cardQ = supabase.from("cards").select("id, alias");
+  if (filter) cardQ = cardQ.eq("company_id", filter);
+  let receiptQuery = supabase.from("receipts").select("id, vendor_name, total_amount, doc_date, company_id").eq("status", "CONFIRMED").order("doc_date", { ascending: false });
+  if (filter) receiptQuery = receiptQuery.eq("company_id", filter);
+
+  // ---- 독립 목록 쿼리 일괄 병렬 ----
+  const [
+    { data: partnerData, error: partnerErr },
+    { data: accountData },
+    { data: catData },
+    { data: empData },
+    { data: cardData },
+    { data: receiptData },
+  ] = await Promise.all([
+    partnerScope("id, name, default_tax_rate"),
+    supabase.from("accounts").select("id, code, name").eq("is_active", true).order("code"),
+    supabase.from("field_options").select("*").eq("category", "bank_category").order("sort_order"),
+    empQuery,
+    cardQ,
+    receiptQuery,
+  ]);
+
+  let partners: PartnerOpt[];
   if (partnerErr) {
     // default_tax_rate 마이그레이션 미적용 시 폴백(세율 자동화 없이 동작)
     const { data: basic } = await partnerScope("id, name");
-    partners = ((basic ?? []) as unknown as { id: string; name: string }[]).map((p) => ({
-      ...p,
-      default_tax_rate: null,
-    }));
+    partners = ((basic ?? []) as unknown as { id: string; name: string }[]).map((p) => ({ ...p, default_tax_rate: null }));
   } else {
     partners = (partnerData ?? []) as unknown as PartnerOpt[];
   }
-
-  // 계정과목 목록(거래별 계정 지정용)
-  const { data: accountData } = await supabase
-    .from("accounts")
-    .select("id, code, name")
-    .eq("is_active", true)
-    .order("code");
   const accountOptions = (accountData ?? []) as { id: string; code: string; name: string }[];
-
-  // 사용자 정의 '구분' 옵션(항목 관리에서 관리)
-  const { data: catData } = await supabase
-    .from("field_options")
-    .select("*")
-    .eq("category", "bank_category")
-    .order("sort_order");
   const categoryOptions = (catData ?? []) as import("@/lib/supabase/database.types").FieldOptionRow[];
-
-  // 직원 목록(구분이 '직원' 연동일 때 거래에 연결 + 급여 자동기록)
-  let empQuery = supabase
-    .from("employees")
-    .select("id, name, company_id")
-    .eq("is_active", true)
-    .order("name");
-  if (filter) empQuery = empQuery.eq("company_id", filter);
-  const { data: empData } = await empQuery;
   const employees = (empData ?? []) as { id: string; name: string; company_id: string | null }[];
-
-  // 카드 목록(통장 출금이 어느 카드의 대금 정산인지 배지 표시용)
-  let cardQ = supabase.from("cards").select("id, alias");
-  if (filter) cardQ = cardQ.eq("company_id", filter);
-  const { data: cardData } = await cardQ;
   const cardAlias: Record<string, string> = Object.fromEntries(
     ((cardData ?? []) as { id: string; alias: string }[]).map((c) => [c.id, c.alias])
   );
-
-  // 영수증 증빙 연결 후보(확정된 영수증)
-  let receiptQuery = supabase
-    .from("receipts")
-    .select("id, vendor_name, total_amount, doc_date, company_id")
-    .eq("status", "CONFIRMED")
-    .order("doc_date", { ascending: false });
-  if (filter) receiptQuery = receiptQuery.eq("company_id", filter);
-  const { data: receiptData } = await receiptQuery;
   const receipts = (receiptData ?? []) as ReceiptOption[];
 
   // 통장별 현재 잔액(전 기간) — 통합 수지 요약용
@@ -191,7 +168,12 @@ export default async function BankPage({
     .is("settled_at", null)
     .order("due_date", { ascending: true, nullsFirst: false });
   if (filter) invQuery = invQuery.eq("company_id", filter);
-  const { data: invData } = await invQuery;
+  let linkQuery = supabase
+    .from("bank_transactions")
+    .select("tax_invoice_id")
+    .not("tax_invoice_id", "is", null);
+  if (filter) linkQuery = linkQuery.eq("company_id", filter);
+  const [{ data: invData }, { data: linkData }] = await Promise.all([invQuery, linkQuery]);
   type RawInv = {
     id: string;
     type: string;
@@ -204,14 +186,6 @@ export default async function BankPage({
     evidence: string | null;
   };
   const rawInvs = (invData ?? []) as RawInv[];
-
-  // 통장에 연결된(=정산된) 계산서 id 집합
-  let linkQuery = supabase
-    .from("bank_transactions")
-    .select("tax_invoice_id")
-    .not("tax_invoice_id", "is", null);
-  if (filter) linkQuery = linkQuery.eq("company_id", filter);
-  const { data: linkData } = await linkQuery;
   const linkedIds = new Set((linkData ?? []).map((r) => (r as { tax_invoice_id: string }).tax_invoice_id));
 
   const toView = (i: RawInv): TradeInvoiceView => ({
@@ -233,34 +207,35 @@ export default async function BankPage({
 
   if (account) {
     // 해당 월 거래만 조회(전 기간을 안 불러와서 빠름)
-    const monthRows = await pageAll<BankTransactionRow>(() =>
+    // 해당 월 거래 + 월초 잔액(직전 거래) 병렬 조회
+    const [monthRows, { data: prevRow }] = await Promise.all([
+      pageAll<BankTransactionRow>(() =>
+        supabase
+          .from("bank_transactions")
+          .select("*")
+          .eq("bank_account_id", account.id)
+          .gte("txn_date", first)
+          .lt("txn_date", next)
+          .order("txn_date", { ascending: true })
+          .order("created_at", { ascending: true })
+      ),
       supabase
         .from("bank_transactions")
-        .select("*")
+        .select("balance_after")
         .eq("bank_account_id", account.id)
-        .gte("txn_date", first)
-        .lt("txn_date", next)
-        .order("txn_date", { ascending: true })
-        .order("created_at", { ascending: true })
-    );
+        .lt("txn_date", first)
+        .not("balance_after", "is", null)
+        .order("txn_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
     const txnsAsc = monthRows.slice().sort(
       (a, b) =>
         a.txn_date.localeCompare(b.txn_date) ||
         (a.txn_time ?? "").localeCompare(b.txn_time ?? "") ||
         (a.created_at ?? "").localeCompare(b.created_at ?? "")
     );
-
-    // 월초 잔액 = first 직전 마지막 거래의 업로드 잔액(balance_after). 없으면 기초잔액.
-    const { data: prevRow } = await supabase
-      .from("bank_transactions")
-      .select("balance_after")
-      .eq("bank_account_id", account.id)
-      .lt("txn_date", first)
-      .not("balance_after", "is", null)
-      .order("txn_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
     priorBalance = (prevRow as { balance_after: number } | null)?.balance_after ?? account.opening_balance;
 
     const withRun = txnsAsc.reduce<TxnWithBalance[]>((acc, t) => {
