@@ -263,3 +263,62 @@ export async function runStudentSync(): Promise<SyncResult> {
 
   return { ok: true, counts, total: mapped.length, skipped };
 }
+
+const DRIVER_EMP_LABEL: Record<string, string> = {
+  full: "정규직",
+  contract: "계약직",
+  freelance: "프리랜서",
+  part: "파트",
+};
+const DRIVER_STATUS_LABEL: Record<string, string> = {
+  active: "근무중",
+  leave: "휴직",
+  retired: "퇴사",
+};
+
+/** winner-kids `drivers`(기사) → drivers upsert (단방향). soft-delete 제외. */
+export async function runDriverSync(): Promise<SyncResult> {
+  const url = process.env.WKS_SUPABASE_URL;
+  const key = process.env.WKS_SUPABASE_SERVICE_KEY;
+  const counts: Record<string, number> = {};
+  const skipped: string[] = [];
+  if (!url || !key)
+    return { ok: false, error: "WKS_SUPABASE_URL/KEY 미설정", counts, total: 0, skipped };
+
+  const src = createSbClient(url, key, { auth: { persistSession: false } });
+  const { data, error } = await src.from("drivers").select("*");
+  if (error) return { ok: false, error: `기사 조회 실패: ${error.message}`, counts, total: 0, skipped };
+
+  const rows = (data ?? []) as Row[];
+  const mapped = rows
+    .filter((d) => !d.deleted_at)
+    .map((d) => ({
+      source_ref: `wks:drivers:${d.id}`,
+      company_id: null,
+      is_active: true,
+      name: s(d.name) ?? "(이름없음)",
+      phone: s(d.phone),
+      email: s(d.email),
+      birth_date: d.birth_date ?? null,
+      address: s(d.address),
+      license_number: s(d.license_number),
+      license_type: s(d.license_type),
+      license_expiry: d.license_expiry ?? null,
+      hire_date: d.hire_date ?? null,
+      employment_type: DRIVER_EMP_LABEL[String(d.employment_type)] ?? s(d.employment_type),
+      status: DRIVER_STATUS_LABEL[String(d.status)] ?? "근무중",
+      bank_name: s(d.bank_name),
+      bank_account: s(d.bank_account),
+      memo: s(d.memo),
+    }));
+  counts["기사"] = mapped.length;
+  if (mapped.length === 0) return { ok: true, counts, total: 0, skipped };
+
+  const db = createAdminClient();
+  const { error: upErr } = await db
+    .from("drivers")
+    .upsert(mapped as never[], { onConflict: "source_ref" });
+  if (upErr) return { ok: false, error: `저장 실패: ${upErr.message}`, counts, total: 0, skipped };
+
+  return { ok: true, counts, total: mapped.length, skipped };
+}

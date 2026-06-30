@@ -631,6 +631,27 @@ export interface LibraryFavoriteRow {
   created_at: string;
 }
 
+// ---------------- CMS 공지 ----------------
+export interface NoticeRow {
+  id: string;
+  company_id: string | null;
+  title: string;
+  body: string | null;
+  audience: string;             // ALL/COMPANY/GROUP/PARTNERS
+  partner_ids: string[];
+  group_tag: string | null;
+  pinned: boolean;
+  start_date: string | null;
+  end_date: string | null;
+  status: string;               // DRAFT/PUBLISHED
+  published_at: string | null;
+  sent_count: number;
+  created_by: string | null;
+  author_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // ---------------- 행사 인력 배정 ----------------
 export interface EventStaffRow {
   id: string;
