@@ -158,6 +158,23 @@ export async function deleteTransaction(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/** 관리자/매니저가 수업 회차 완료 처리(현장 모니터링). */
+export async function managerSetSessionDone(id: string, done: boolean): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const patch: Record<string, unknown> = {
+    status: done ? "DONE" : "PLANNED",
+    completed_at: done ? new Date().toISOString() : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await db.from("transactions").update(patch as never).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/sessions");
+  revalidatePath("/partners");
+  return { ok: true };
+}
+
 /**
  * 체육수업 계약 → 해당 월의 요일별 수업 회차를 거래내역(예정)으로 자동 생성.
  *   detail.dows(number[] 0=일)·detail.class_name 사용, 단가는 contract.unit_price.

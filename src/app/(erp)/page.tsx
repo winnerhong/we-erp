@@ -87,12 +87,14 @@ export default async function DashboardPage() {
   const taskToday = openTasks.filter((t) => t.due_date === today).length;
 
   // 거래/정산 요약(거래처 CRM)
-  let txnQ = supabase.from("transactions").select("amount, status, settlement_id, txn_date").neq("status", "CANCELED");
+  let txnQ = supabase.from("transactions").select("amount, status, settlement_id, txn_date, type").neq("status", "CANCELED");
   let setQ = supabase.from("settlements").select("total, status");
   if (filter) { txnQ = txnQ.eq("company_id", filter); setQ = setQ.eq("company_id", filter); }
   const [{ data: txnData }, { data: setData }] = await Promise.all([txnQ, setQ]);
-  const txnRows = (txnData ?? []) as { amount: number; status: string; settlement_id: string | null; txn_date: string }[];
+  const txnRows = (txnData ?? []) as { amount: number; status: string; settlement_id: string | null; txn_date: string; type: string }[];
   const setRows = (setData ?? []) as { total: number; status: string }[];
+  const todaySessions = txnRows.filter((t) => t.type === "CLASS" && t.txn_date === today);
+  const sessionsDone = todaySessions.filter((t) => t.status === "DONE").length;
   const txnThisMonth = txnRows.filter((t) => inMonth(t.txn_date)).reduce((s, t) => s + t.amount, 0);
   const unsettledAmount = txnRows.filter((t) => !t.settlement_id).reduce((s, t) => s + t.amount, 0);
   const draftSettleAmount = setRows.filter((s) => s.status === "DRAFT").reduce((s2, s) => s2 + s.total, 0);
@@ -295,10 +297,11 @@ export default async function DashboardPage() {
                 <h2 className="text-sm font-semibold text-neutral-700">거래처 거래·정산</h2>
                 <Link href="/partners" className="text-xs text-indigo-600 hover:underline">거래처 →</Link>
               </div>
-              <div className="mt-2 grid grid-cols-3 gap-3">
+              <div className="mt-2 grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <Kpi label="이번 달 거래액" value={krw(txnThisMonth)} href="/partners" small />
                 <Kpi label="정산 대기(미정산 거래)" value={krw(unsettledAmount)} href="/partners" small tone={unsettledAmount > 0 ? "red" : undefined} />
                 <Kpi label="발행 대기(미발행 정산)" value={krw(draftSettleAmount)} href="/partners" small tone={draftSettleAmount > 0 ? "red" : undefined} />
+                {todaySessions.length > 0 && <Kpi label="오늘 수업(완료/총)" value={`${sessionsDone}/${todaySessions.length}`} href="/sessions" small tone={sessionsDone < todaySessions.length ? "red" : "green"} />}
               </div>
             </>
           )}
