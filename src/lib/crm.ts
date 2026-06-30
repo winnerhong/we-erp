@@ -86,6 +86,28 @@ export function crmChip(tone: string | null | undefined): string {
   return CRM_TONE_CHIP[tone ?? "neutral"] ?? CRM_TONE_CHIP.neutral;
 }
 
+export const SETTLEMENT_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "미발행",
+  ISSUED: "발행",
+  PAID: "입금완료",
+};
+export const SETTLEMENT_STATUS_TONE: Record<string, string> = {
+  DRAFT: "neutral",
+  ISSUED: "blue",
+  PAID: "emerald",
+};
+
+/**
+ * 공급가 합 → 부가세·합계 계산.
+ *   taxCategory: TAXABLE=과세(rate%) / TAXFREE·ZERO=0. rate 미지정 시 과세 10%.
+ */
+export function calcTax(subtotal: number, taxCategory: string | null, rate: number | null): { tax: number; total: number } {
+  const taxable = !taxCategory || taxCategory === "TAXABLE";
+  const r = taxable ? (rate ?? 10) : 0;
+  const tax = Math.round(subtotal * (r / 100));
+  return { tax, total: subtotal + tax };
+}
+
 /** 거래 규모 기준 자동 등급 */
 export function autoGrade(totalAmount: number): { label: string; tone: string } {
   if (totalAmount >= 50_000_000) return { label: "VIP", tone: "rose" };

@@ -10,11 +10,11 @@ import { PaybackList, type PaybackBrief } from "@/components/payback-list";
 import { Card, Field, TextInput, NumberInput, SelectInput, Badge, EmptyState, FormSection } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
-import type { PartnerRow, FieldOptionRow, ContractRow, TransactionRow } from "@/lib/supabase/database.types";
+import type { PartnerRow, FieldOptionRow, ContractRow, TransactionRow, SettlementRow } from "@/lib/supabase/database.types";
 import type { ImportCtx } from "@/lib/import-specs";
 import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
 import { importPartnersFromWks, bulkAssignCompany } from "./actions";
-import { CrmKpis, ContractsTab, TransactionsTab } from "./crm-panel";
+import { CrmKpis, ContractsTab, TransactionsTab, SettlementsTab } from "./crm-panel";
 import { PARTNER_KIND_LABEL, TAX_CATEGORY_LABEL, PAYMENT_TERMS_LABEL, PAYMENT_CYCLE_LABEL, EVIDENCE_TYPE_LABEL } from "@/lib/crm";
 import type { SyncKind } from "@/lib/wks-sync";
 
@@ -127,6 +127,7 @@ export function PartnersClient({
   paybacks,
   contracts,
   transactions,
+  settlements,
   employees,
   receivable,
   payable,
@@ -140,6 +141,7 @@ export function PartnersClient({
   paybacks: PaybackBrief[];
   contracts: ContractRow[];
   transactions: TransactionRow[];
+  settlements: SettlementRow[];
   employees: { id: string; name: string }[];
   receivable: number;
   payable: number;
@@ -151,7 +153,7 @@ export function PartnersClient({
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("ALL");
-  const [tab, setTab] = useState<"info" | "contract" | "txn" | "ledger" | "payback">("txn");
+  const [tab, setTab] = useState<"info" | "contract" | "txn" | "settle" | "ledger" | "payback">("txn");
   const [ledgerFilter, setLedgerFilter] = useState<"ALL" | LedgerEntry["source"]>("ALL");
   const [view, setView] = useState<"card" | "grid">("card");
   // 사업자 일괄배정 모드
@@ -459,6 +461,7 @@ export function PartnersClient({
               {([
                 ["txn", `📊 거래내역 ${transactions.length}`],
                 ["contract", `📑 계약 ${contracts.length}`],
+                ["settle", `🧾 정산 ${settlements.length}`],
                 ["info", "🧾 기본정보"],
                 ["ledger", `📒 거래원장 ${entries.length}`],
                 ["payback", `💸 페이백 ${paybacks.length}`],
@@ -490,6 +493,13 @@ export function PartnersClient({
                 companyId={selected.company_id}
                 contracts={contracts}
                 employees={employees}
+                onChanged={() => router.refresh()}
+              />
+            ) : tab === "settle" ? (
+              <SettlementsTab
+                partnerId={selected.id}
+                settlements={settlements}
+                transactions={transactions}
                 onChanged={() => router.refresh()}
               />
             ) : tab === "info" ? (

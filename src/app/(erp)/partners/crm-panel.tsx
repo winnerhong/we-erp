@@ -6,12 +6,14 @@ import { NumberInput } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import {
   CONTRACT_TYPES, CONTRACT_TYPE_LABEL, CONTRACT_TYPE_ICON, CONTRACT_TYPE_TONE, CONTRACT_STATUS_LABEL,
-  SETTLE_UNIT_LABEL, TXN_STATUS_LABEL, TXN_STATUS_TONE, EVIDENCE_TYPE_LABEL, crmChip, autoGrade,
+  SETTLE_UNIT_LABEL, TXN_STATUS_LABEL, TXN_STATUS_TONE, EVIDENCE_TYPE_LABEL,
+  SETTLEMENT_STATUS_LABEL, SETTLEMENT_STATUS_TONE, crmChip, autoGrade,
 } from "@/lib/crm";
-import type { ContractRow, TransactionRow, ContractType } from "@/lib/supabase/database.types";
+import type { ContractRow, TransactionRow, SettlementRow, ContractType } from "@/lib/supabase/database.types";
 import {
   createContract, updateContract, deleteContract,
   createTransaction, updateTransaction, deleteTransaction, generateMonthlyClassTxns,
+  generateMonthlySettlement, updateSettlementStatus, deleteSettlement,
 } from "./crm-actions";
 
 type Emp = { id: string; name: string };
@@ -329,7 +331,7 @@ export function TransactionsTab({
                   <tr key={t.id} className="hover:bg-neutral-50">
                     <td className="whitespace-nowrap px-3 py-2 tabular-nums text-neutral-600">{t.txn_date.slice(2)}</td>
                     <td className="px-3 py-2"><span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${crmChip(CONTRACT_TYPE_TONE[ty] ?? "neutral")}`}>{CONTRACT_TYPE_LABEL[ty] ?? t.type}</span></td>
-                    <td className="px-3 py-2"><span className="text-neutral-800">{t.title || "-"}</span>{t.contract_id && contractName.get(t.contract_id) && <span className="ml-1 text-[11px] text-neutral-400">({contractName.get(t.contract_id)})</span>}{t.instructor_id && <span className="ml-1 text-[11px] text-neutral-400">· {empName.get(t.instructor_id)}</span>}</td>
+                    <td className="px-3 py-2"><span className="text-neutral-800">{t.title || "-"}</span>{t.contract_id && contractName.get(t.contract_id) && <span className="ml-1 text-[11px] text-neutral-400">({contractName.get(t.contract_id)})</span>}{t.instructor_id && <span className="ml-1 text-[11px] text-neutral-400">· {empName.get(t.instructor_id)}</span>}{t.settlement_id && <span className="ml-1 rounded bg-emerald-50 px-1 py-0.5 text-[10px] font-medium text-emerald-600">정산됨</span>}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{t.qty.toLocaleString()}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-neutral-500">{krw(t.unit_price)}</td>
                     <td className="px-3 py-2 text-right font-semibold tabular-nums">{krw(t.amount)}</td>
@@ -429,6 +431,83 @@ function TxnModal({
       </div>
       <Lbl t="메모"><textarea className={inputCls} value={memo} onChange={(e) => setMemo(e.target.value)} /></Lbl>
     </ModalShell>
+  );
+}
+
+// ============ 정산 탭 ============
+export function SettlementsTab({
+  partnerId, settlements, transactions, onChanged,
+}: {
+  partnerId: string; settlements: SettlementRow[]; transactions: TransactionRow[]; onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const now = new Date();
+  const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+
+  // 정산별 거래 건수
+  const txnCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of transactions) if (t.settlement_id) m.set(t.settlement_id, (m.get(t.settlement_id) ?? 0) + 1);
+    return m;
+  }, [transactions]);
+  const unsettled = transactions.filter((t) => !t.settlement_id && t.status !== "CANCELED");
+
+  function genMonth() {
+    startTransition(async () => {
+      const r = await generateMonthlySettlement(partnerId, month);
+      if (!r.ok) { alert(r.error); return; }
+      alert(`${month} 정산 생성 — 거래 ${r.count}건 묶음`);
+      onChanged();
+    });
+  }
+  function setStatus(id: string, status: string) {
+    startTransition(async () => { const r = await updateSettlementStatus(id, status); if (!r.ok) alert(r.error); else onChanged(); });
+  }
+  function remove(id: string) {
+    if (!confirm("이 정산을 해제할까요? (묶인 거래는 미정산으로 복귀)")) return;
+    startTransition(async () => { const r = await deleteSettlement(id); if (!r.ok) alert(r.error); else onChanged(); });
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* 월별 정산 생성 */}
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-3">
+        <span className="text-sm font-medium text-neutral-700">월별 정산 생성</span>
+        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm" />
+        <button onClick={genMonth} disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">
+          {pending ? "처리 중…" : "이 달 미정산 거래 합산"}
+        </button>
+        <span className="ml-auto text-xs text-neutral-400">미정산 거래 {unsettled.length}건 / {krw(unsettled.reduce((s, t) => s + t.amount, 0))}</span>
+      </div>
+
+      {settlements.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-sm text-neutral-400">정산 내역이 없습니다. 위에서 월별 정산을 생성하세요.</p>
+      ) : (
+        <div className="space-y-2">
+          {settlements.map((s) => (
+            <div key={s.id} className="rounded-xl border border-neutral-200 bg-white p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${crmChip(SETTLEMENT_STATUS_TONE[s.status] ?? "neutral")}`}>{SETTLEMENT_STATUS_LABEL[s.status] ?? s.status}</span>
+                <span className="font-semibold text-neutral-800">{s.title}</span>
+                <span className="text-xs text-neutral-400">거래 {txnCount.get(s.id) ?? 0}건</span>
+                <span className="ml-auto text-right">
+                  <span className="text-base font-bold tabular-nums text-neutral-900">{krw(s.total)}</span>
+                  <span className="ml-1 text-[11px] text-neutral-400">(공급 {krw(s.subtotal)} + 세 {krw(s.tax_amount)})</span>
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <a href={`/print/settlement/${s.id}`} target="_blank" rel="noreferrer" className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50">🖨 거래명세서</a>
+                <select value={s.status} disabled={pending} onChange={(e) => setStatus(s.id, e.target.value)} className="rounded-lg border border-neutral-300 px-2 py-1 text-xs">
+                  {Object.entries(SETTLEMENT_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+                <button onClick={() => remove(s.id)} disabled={pending} className="rounded-lg px-2.5 py-1 text-xs text-rose-400 hover:bg-rose-50">해제</button>
+                {s.period && <span className="ml-auto text-[11px] text-neutral-400">{s.period}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

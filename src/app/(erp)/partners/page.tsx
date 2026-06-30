@@ -3,7 +3,7 @@ import { getImportCtx } from "@/lib/queries";
 import { getCompanyContext, companyFilter } from "@/lib/active-company";
 import { PartnersClient, type LedgerEntry } from "./partners-client";
 import { toPaybackBrief, type PaybackBrief } from "@/components/payback-list";
-import type { PartnerRow, FieldOptionRow, PaybackRow, ContractRow, TransactionRow } from "@/lib/supabase/database.types";
+import type { PartnerRow, FieldOptionRow, PaybackRow, ContractRow, TransactionRow, SettlementRow } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "거래처" };
 
@@ -39,15 +39,18 @@ export default async function PartnersPage({
   let paybacks: PaybackBrief[] = [];
   let contracts: ContractRow[] = [];
   let transactions: TransactionRow[] = [];
+  let settlements: SettlementRow[] = [];
   let receivable = 0;
   let payable = 0;
   if (selectedId) {
-    const [{ data: cData }, { data: tData }] = await Promise.all([
+    const [{ data: cData }, { data: tData }, { data: sData }] = await Promise.all([
       supabase.from("contracts").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("partner_id", selectedId).order("txn_date", { ascending: false }),
+      supabase.from("settlements").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
     ]);
     contracts = (cData ?? []) as ContractRow[];
     transactions = (tData ?? []) as TransactionRow[];
+    settlements = (sData ?? []) as SettlementRow[];
     const [{ data: tax }, { data: rcpt }, { data: bank }, { data: buy }] = await Promise.all([
       supabase.from("tax_invoices").select("id, type, total_amount, status, doc_date, memo").eq("partner_id", selectedId),
       supabase.from("receipts").select("id, total_amount, status, doc_date, vendor_name, memo").eq("partner_id", selectedId),
@@ -158,6 +161,7 @@ export default async function PartnersPage({
       paybacks={paybacks}
       contracts={contracts}
       transactions={transactions}
+      settlements={settlements}
       employees={employees}
       receivable={receivable}
       payable={payable}

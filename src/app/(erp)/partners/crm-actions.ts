@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureUser } from "@/lib/auth-guard";
+import { calcTax } from "@/lib/crm";
 import type { ContractRow } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -202,4 +203,94 @@ export async function generateMonthlyClassTxns(contractId: string, month: string
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
   return { ok: true, count: rows.length };
+}
+
+// ---------------- 정산(Settlement) ----------------
+
+interface PartnerTaxInfo { company_id: string | null; name: string; tax_category: string | null; default_tax_rate: number | null }
+
+/** 거래처+월의 미정산 거래를 모아 월별 정산 1건 생성(공급가 합산→부가세·합계). */
+export async function generateMonthlySettlement(partnerId: string, month: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  if (!/^\d{4}-\d{2}$/.test(month)) return { ok: false, error: "월 형식 오류(YYYY-MM)" };
+  const db = createAdminClient();
+  const [y, m] = month.split("-").map(Number);
+  const last = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+
+  const { data: txns } = await db
+    .from("transactions").select("id, amount")
+    .eq("partner_id", partnerId).is("settlement_id", null).neq("status", "CANCELED")
+    .gte("txn_date", `${month}-01`).lte("txn_date", last);
+  const list = (txns ?? []) as { id: string; amount: number }[];
+  if (list.length === 0) return { ok: false, error: "정산할 미정산 거래가 없습니다(이미 정산됐거나 거래 없음)." };
+
+  const { data: p } = await db.from("partners").select("company_id, name, tax_category, default_tax_rate").eq("id", partnerId).maybeSingle();
+  const partner = p as PartnerTaxInfo | null;
+  const subtotal = list.reduce((s, t) => s + t.amount, 0);
+  const { tax, total } = calcTax(subtotal, partner?.tax_category ?? null, partner?.default_tax_rate ?? null);
+
+  const { data: st, error: sErr } = await db.from("settlements").insert({
+    company_id: partner?.company_id ?? null, partner_id: partnerId, type: "MONTHLY", period: month,
+    title: `${month} ${partner?.name ?? ""} 정산`.trim(), subtotal, tax_amount: tax, total, status: "DRAFT",
+  } as never).select("id").single();
+  if (sErr) return { ok: false, error: sErr.message };
+  const sid = (st as { id: string }).id;
+  const { error: uErr } = await db.from("transactions").update({ settlement_id: sid } as never).in("id", list.map((t) => t.id));
+  if (uErr) return { ok: false, error: uErr.message };
+  revalidatePath("/partners");
+  return { ok: true, id: sid, count: list.length };
+}
+
+/** 선택한 거래들로 정산 1건 생성(건별/수동). */
+export async function createSettlementFromTxns(partnerId: string, txnIds: string[], title?: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const ids = txnIds.filter(Boolean);
+  if (ids.length === 0) return { ok: false, error: "선택된 거래가 없습니다" };
+  const db = createAdminClient();
+  const { data: txns } = await db.from("transactions").select("id, amount, settlement_id").in("id", ids).eq("partner_id", partnerId);
+  const list = (txns ?? []) as { id: string; amount: number; settlement_id: string | null }[];
+  if (list.some((t) => t.settlement_id)) return { ok: false, error: "이미 정산된 거래가 포함되어 있습니다." };
+  if (list.length === 0) return { ok: false, error: "거래를 찾을 수 없습니다" };
+
+  const { data: p } = await db.from("partners").select("company_id, name, tax_category, default_tax_rate").eq("id", partnerId).maybeSingle();
+  const partner = p as PartnerTaxInfo | null;
+  const subtotal = list.reduce((s, t) => s + t.amount, 0);
+  const { tax, total } = calcTax(subtotal, partner?.tax_category ?? null, partner?.default_tax_rate ?? null);
+
+  const { data: st, error: sErr } = await db.from("settlements").insert({
+    company_id: partner?.company_id ?? null, partner_id: partnerId, type: "MANUAL", period: null,
+    title: title?.trim() || `${partner?.name ?? ""} 정산`.trim(), subtotal, tax_amount: tax, total, status: "DRAFT",
+  } as never).select("id").single();
+  if (sErr) return { ok: false, error: sErr.message };
+  const sid = (st as { id: string }).id;
+  await db.from("transactions").update({ settlement_id: sid } as never).in("id", list.map((t) => t.id));
+  revalidatePath("/partners");
+  return { ok: true, id: sid, count: list.length };
+}
+
+/** 정산 상태 변경(미발행/발행/입금) — 타임스탬프 동기화. */
+export async function updateSettlementStatus(id: string, status: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+  if (status === "ISSUED") patch.issued_at = new Date().toISOString();
+  if (status === "PAID") patch.paid_at = new Date().toISOString();
+  const { error } = await db.from("settlements").update(patch as never).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/partners");
+  return { ok: true };
+}
+
+/** 정산 삭제(해제) — FK on delete set null 로 포함 거래는 미정산으로 복귀. */
+export async function deleteSettlement(id: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { error } = await db.from("settlements").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/partners");
+  return { ok: true };
 }

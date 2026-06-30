@@ -116,6 +116,25 @@ export interface ContractRow {
   updated_at: string;
 }
 
+export interface SettlementRow {
+  id: string;
+  company_id: string | null;
+  partner_id: string;
+  type: string;               // MONTHLY/EVENT/RENTAL/MANUAL
+  period: string | null;      // 'YYYY-MM'
+  title: string;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  status: string;             // DRAFT/ISSUED/PAID
+  issued_at: string | null;
+  paid_at: string | null;
+  tax_invoice_id: string | null;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TransactionRow {
   id: string;
   company_id: string | null;
@@ -662,6 +681,7 @@ export interface Database {
       library_favorites: TableShape<LibraryFavoriteRow, "profile_id" | "file_id">;
       contracts: TableShape<ContractRow, "partner_id" | "name">;
       transactions: TableShape<TransactionRow, "partner_id" | "txn_date">;
+      settlements: TableShape<SettlementRow, "partner_id" | "title">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
