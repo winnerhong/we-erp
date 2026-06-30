@@ -35,3 +35,22 @@ export const MENUS: MenuItem[] = [
   { href: "/documents", label: "서류관리", icon: "📄" },
   { href: "/library", label: "자료실", icon: "📚" },
 ];
+
+/** 상단 네비 그룹 — MENUS 의 href 를 묶어 드롭다운으로 표시(권한/프록시는 MENUS 그대로 사용). */
+export interface MenuGroup {
+  label: string;
+  icon: string;
+  hrefs: string[];
+}
+export const MENU_GROUPS: MenuGroup[] = [
+  { label: "운영", icon: "🏫", hrefs: ["/sessions", "/events", "/assets", "/calendar", "/notices"] },
+  { label: "영업·고객", icon: "🤝", hrefs: ["/partners", "/students", "/sales"] },
+  { label: "회계", icon: "💰", hrefs: ["/daily", "/report", "/finance", "/purchases"] },
+  { label: "증빙·세무", icon: "🧾", hrefs: ["/tax-invoices", "/receipts", "/bank", "/cards", "/paybacks"] },
+  { label: "인사", icon: "👥", hrefs: ["/employees", "/drivers", "/org", "/attendance", "/hr"] },
+  { label: "문서", icon: "📄", hrefs: ["/documents", "/library"] },
+  { label: "설정", icon: "⚙️", hrefs: ["/companies", "/accounts"] },
+];
+
+/** href → MenuItem 빠른 조회 */
+export const MENU_BY_HREF: Record<string, MenuItem> = Object.fromEntries(MENUS.map((m) => [m.href, m]));
