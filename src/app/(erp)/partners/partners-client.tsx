@@ -10,10 +10,12 @@ import { PaybackList, type PaybackBrief } from "@/components/payback-list";
 import { Card, Field, TextInput, NumberInput, SelectInput, Badge, EmptyState, FormSection } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
-import type { PartnerRow, FieldOptionRow } from "@/lib/supabase/database.types";
+import type { PartnerRow, FieldOptionRow, ContractRow, TransactionRow } from "@/lib/supabase/database.types";
 import type { ImportCtx } from "@/lib/import-specs";
 import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
-import { importPartnersFromWks } from "./actions";
+import { importPartnersFromWks, bulkAssignCompany } from "./actions";
+import { CrmKpis, ContractsTab, TransactionsTab } from "./crm-panel";
+import { PARTNER_KIND_LABEL, TAX_CATEGORY_LABEL, PAYMENT_TERMS_LABEL, PAYMENT_CYCLE_LABEL, EVIDENCE_TYPE_LABEL } from "@/lib/crm";
 import type { SyncKind } from "@/lib/wks-sync";
 
 export interface LedgerEntry {
@@ -118,19 +120,27 @@ function WksSyncControls() {
 export function PartnersClient({
   rows,
   ctx,
+  activeCompanyId,
   options,
   selectedId,
   entries,
   paybacks,
+  contracts,
+  transactions,
+  employees,
   receivable,
   payable,
 }: {
   rows: PartnerRow[];
   ctx: ImportCtx;
+  activeCompanyId: string | null;
   options: FieldOptionRow[];
   selectedId: string | null;
   entries: LedgerEntry[];
   paybacks: PaybackBrief[];
+  contracts: ContractRow[];
+  transactions: TransactionRow[];
+  employees: { id: string; name: string }[];
   receivable: number;
   payable: number;
 }) {
@@ -141,9 +151,14 @@ export function PartnersClient({
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("ALL");
-  const [tab, setTab] = useState<"info" | "ledger" | "payback">("info");
+  const [tab, setTab] = useState<"info" | "contract" | "txn" | "ledger" | "payback">("txn");
   const [ledgerFilter, setLedgerFilter] = useState<"ALL" | LedgerEntry["source"]>("ALL");
   const [view, setView] = useState<"card" | "grid">("card");
+  // 사업자 일괄배정 모드
+  const [selectMode, setSelectMode] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [assignTo, setAssignTo] = useState<string>(activeCompanyId ?? "");
+  const [assigning, startAssign] = useTransition();
 
   const accountLabel = new Map(ctx.accounts.map((a) => [a.id, `${a.code} ${a.name}`]));
   const companyName = (id: string | null) => (id ? ctx.companies.find((c) => c.id === id)?.name ?? "?" : "공용");
@@ -168,6 +183,42 @@ export function PartnersClient({
   });
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const go = (id: string) => router.push(`/partners?p=${id}`);
+
+  // 일괄배정: 선택 토글 / 필터 전체선택 / 실행
+  const togglePick = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allFilteredPicked = filtered.length > 0 && filtered.every((r) => picked.has(r.id));
+  const toggleAllFiltered = () =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (allFilteredPicked) filtered.forEach((r) => next.delete(r.id));
+      else filtered.forEach((r) => next.add(r.id));
+      return next;
+    });
+  const exitSelect = () => {
+    setSelectMode(false);
+    setPicked(new Set());
+  };
+  const runAssign = () => {
+    const ids = [...picked];
+    if (ids.length === 0) return;
+    const label = assignTo ? ctx.companies.find((c) => c.id === assignTo)?.name ?? "" : "공용";
+    if (!confirm(`선택한 ${ids.length}개 거래처를 '${label}'(으)로 배정할까요?`)) return;
+    startAssign(async () => {
+      const res = await bulkAssignCompany(ids, assignTo || null);
+      if (!res.ok) {
+        alert(res.error ?? "배정 실패");
+        return;
+      }
+      exitSelect();
+      router.refresh();
+    });
+  };
 
   const ledger = ledgerFilter === "ALL" ? entries : entries.filter((e) => e.source === ledgerFilter);
   const totalIn = ledger.filter((e) => e.direction === "IN").reduce((s, e) => s + e.amount, 0);
@@ -214,6 +265,16 @@ export function PartnersClient({
             📄 CSV
           </button>
           <WksSyncControls />
+          {view === "card" && (
+            <button
+              onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
+              className={`rounded-lg border px-3 py-2 text-sm font-medium ${
+                selectMode ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"
+              }`}
+            >
+              🏢 사업자 배정
+            </button>
+          )}
           <button
             onClick={() => setAddOpen(true)}
             className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700"
@@ -230,6 +291,7 @@ export function PartnersClient({
           catSel={catSel}
           catLabel={catLabel}
           accountLabel={accountLabel}
+          defaultCompanyId={activeCompanyId}
           onOpenDetail={go}
           onChanged={() => router.refresh()}
         />
@@ -268,26 +330,45 @@ export function PartnersClient({
               </button>
             </div>
           </div>
+          {/* 일괄배정 모드: 전체선택 줄 */}
+          {selectMode && (
+            <div className="flex items-center justify-between gap-2 border-b border-neutral-100 bg-indigo-50/50 px-3 py-2 text-xs">
+              <label className="flex items-center gap-1.5 font-medium text-neutral-700">
+                <input type="checkbox" checked={allFilteredPicked} onChange={toggleAllFiltered} />
+                전체 선택 ({filtered.length})
+              </label>
+              <span className="font-semibold text-indigo-700">{picked.size}개 선택됨</span>
+            </div>
+          )}
           <div className="max-h-[68vh] divide-y divide-neutral-100 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-neutral-400">거래처가 없습니다.</p>
             ) : (
               filtered.map((r) => {
                 const on = selected?.id === r.id;
+                const checked = picked.has(r.id);
                 return (
                   <button
                     key={r.id}
-                    onClick={() => go(r.id)}
+                    onClick={() => (selectMode ? togglePick(r.id) : go(r.id))}
                     className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition ${
-                      on ? "bg-indigo-50" : "hover:bg-neutral-50"
+                      selectMode ? (checked ? "bg-indigo-50" : "hover:bg-neutral-50") : on ? "bg-indigo-50" : "hover:bg-neutral-50"
                     }`}
                   >
+                    {selectMode && (
+                      <input type="checkbox" checked={checked} readOnly className="pointer-events-none shrink-0" />
+                    )}
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-semibold text-neutral-800">{r.name}</span>
                         {r.category && (
                           <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] ${toneClass(catColor[r.category])}`}>
                             {catLabel[r.category] ?? r.category}
+                          </span>
+                        )}
+                        {selectMode && (
+                          <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${r.company_id ? "bg-teal-100 text-teal-700" : "bg-amber-100 text-amber-700"}`}>
+                            {companyName(r.company_id)}
                           </span>
                         )}
                       </span>
@@ -301,6 +382,27 @@ export function PartnersClient({
               })
             )}
           </div>
+          {/* 일괄배정 실행 바 */}
+          {selectMode && (
+            <div className="space-y-2 border-t border-neutral-200 bg-white p-3">
+              <p className="text-xs text-neutral-500">선택한 거래처를 어느 사업자로 배정할까요?</p>
+              <div className="flex items-center gap-2">
+                <SelectInput value={assignTo} onChange={(e) => setAssignTo(e.target.value)} className="flex-1">
+                  <option value="">공용(모든 사업자에 표시)</option>
+                  {ctx.companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </SelectInput>
+                <button
+                  onClick={runAssign}
+                  disabled={assigning || picked.size === 0}
+                  className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
+                >
+                  {assigning ? "배정 중…" : `${picked.size}개 배정`}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 우측 상세 */}
@@ -349,9 +451,14 @@ export function PartnersClient({
               </div>
             </div>
 
+            {/* KPI (거래 실적 360°) */}
+            <CrmKpis transactions={transactions} />
+
             {/* 탭 */}
-            <div className="flex gap-1 border-b border-neutral-200">
+            <div className="flex flex-wrap gap-1 border-b border-neutral-200">
               {([
+                ["txn", `📊 거래내역 ${transactions.length}`],
+                ["contract", `📑 계약 ${contracts.length}`],
                 ["info", "🧾 기본정보"],
                 ["ledger", `📒 거래원장 ${entries.length}`],
                 ["payback", `💸 페이백 ${paybacks.length}`],
@@ -368,7 +475,24 @@ export function PartnersClient({
               ))}
             </div>
 
-            {tab === "info" ? (
+            {tab === "txn" ? (
+              <TransactionsTab
+                partnerId={selected.id}
+                companyId={selected.company_id}
+                contracts={contracts}
+                transactions={transactions}
+                employees={employees}
+                onChanged={() => router.refresh()}
+              />
+            ) : tab === "contract" ? (
+              <ContractsTab
+                partnerId={selected.id}
+                companyId={selected.company_id}
+                contracts={contracts}
+                employees={employees}
+                onChanged={() => router.refresh()}
+              />
+            ) : tab === "info" ? (
               <section className="rounded-2xl border border-neutral-200 bg-white">
                 <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
                   <h3 className="font-semibold text-neutral-800">🧾 기본 정보</h3>
@@ -516,6 +640,8 @@ export function PartnersClient({
           companies={ctx.companies}
           accounts={ctx.accounts}
           catSel={catSel}
+          employees={employees}
+          defaultCompanyId={activeCompanyId}
           onClose={() => {
             setAddOpen(false);
             setEditOpen(false);
@@ -540,6 +666,7 @@ function PartnerGrid({
   catSel,
   catLabel,
   accountLabel,
+  defaultCompanyId,
   onOpenDetail,
   onChanged,
 }: {
@@ -548,6 +675,7 @@ function PartnerGrid({
   catSel: { value: string; label: string }[];
   catLabel: Record<string, string>;
   accountLabel: Map<string, string>;
+  defaultCompanyId: string | null;
   onOpenDetail: (id: string) => void;
   onChanged: () => void;
 }) {
@@ -565,12 +693,13 @@ function PartnerGrid({
     });
   }
 
-  // +행 추가 → 빈 거래처 즉시 생성. 모든 행이 같은 사업자면 그 사업자로 자동 배정.
+  // +행 추가 → 빈 거래처 즉시 생성. 활성 사업자 우선, 없으면 모든 행이 같은 사업자일 때 그 사업자.
   const soleCompany =
     rows.length > 0 && rows.every((r) => r.company_id === rows[0].company_id) ? rows[0].company_id : null;
+  const addCompany = defaultCompanyId ?? soleCompany;
   function handleAdd() {
     startTransition(async () => {
-      await createRow("partners", { name: "", company_id: soleCompany });
+      await createRow("partners", { name: "", company_id: addCompany });
       onChanged();
     });
   }
@@ -707,6 +836,8 @@ function PartnerEditModal({
   companies,
   accounts,
   catSel,
+  employees,
+  defaultCompanyId,
   onClose,
   onSaved,
 }: {
@@ -714,6 +845,8 @@ function PartnerEditModal({
   companies: { id: string; name: string }[];
   accounts: { id: string; code: string; name: string }[];
   catSel: { value: string; label: string }[];
+  employees: { id: string; name: string }[];
+  defaultCompanyId: string | null;
   onClose: () => void;
   onSaved: (id?: string) => void;
 }) {
@@ -726,10 +859,29 @@ function PartnerEditModal({
     contact_name: partner?.contact_name ?? "",
     phone: partner?.phone ?? "",
     email: partner?.email ?? "",
-    company_id: partner?.company_id ?? "",
+    company_id: partner ? partner.company_id ?? "" : defaultCompanyId ?? "",
     default_account_id: partner?.default_account_id ?? "",
     default_tax_rate: partner?.default_tax_rate?.toString() ?? "",
     memo: partner?.memo ?? "",
+    // CRM 확장(핵심)
+    rep_name: partner?.rep_name ?? "",
+    biz_type: partner?.biz_type ?? "",
+    biz_item: partner?.biz_item ?? "",
+    address: partner?.address ?? "",
+    address_detail: partner?.address_detail ?? "",
+    tax_email: partner?.tax_email ?? "",
+    partner_kind: partner?.partner_kind ?? "SALES",
+    tax_category: partner?.tax_category ?? "TAXABLE",
+    payment_terms: partner?.payment_terms ?? "",
+    payment_cycle: partner?.payment_cycle ?? "",
+    evidence_type: partner?.evidence_type ?? "",
+    credit_limit: partner?.credit_limit?.toString() ?? "",
+    bank_name: partner?.bank_name ?? "",
+    account_no: partner?.account_no ?? "",
+    account_holder: partner?.account_holder ?? "",
+    sales_rep_id: partner?.sales_rep_id ?? "",
+    partner_group: partner?.partner_group ?? "",
+    popbill_corpnum: partner?.popbill_corpnum ?? "",
   });
 
   function save() {
@@ -738,6 +890,7 @@ function PartnerEditModal({
       return;
     }
     const rate = d.default_tax_rate.trim();
+    const limit = d.credit_limit.trim();
     const value = {
       name: d.name.trim(),
       category: d.category || null,
@@ -749,6 +902,24 @@ function PartnerEditModal({
       default_account_id: d.default_account_id || null,
       default_tax_rate: rate === "" ? null : Number(rate),
       memo: d.memo.trim() || null,
+      rep_name: d.rep_name.trim() || null,
+      biz_type: d.biz_type.trim() || null,
+      biz_item: d.biz_item.trim() || null,
+      address: d.address.trim() || null,
+      address_detail: d.address_detail.trim() || null,
+      tax_email: d.tax_email.trim() || null,
+      partner_kind: d.partner_kind || null,
+      tax_category: d.tax_category || null,
+      payment_terms: d.payment_terms || null,
+      payment_cycle: d.payment_cycle || null,
+      evidence_type: d.evidence_type || null,
+      credit_limit: limit === "" ? null : Number(limit.replace(/[^\d.-]/g, "")),
+      bank_name: d.bank_name.trim() || null,
+      account_no: d.account_no.trim() || null,
+      account_holder: d.account_holder.trim() || null,
+      sales_rep_id: d.sales_rep_id || null,
+      partner_group: d.partner_group.trim() || null,
+      popbill_corpnum: d.popbill_corpnum.trim() || null,
     };
     startTransition(async () => {
       const res = partner ? await updateRow("partners", partner.id, value) : await createRow("partners", value);
@@ -803,8 +974,62 @@ function PartnerEditModal({
           </div>
         </FormSection>
 
-        {/* 4. 메모 */}
-        <FormSection no={4} title="메모">
+        {/* 4. 사업자 상세 */}
+        <FormSection no={4} title="사업자 상세" desc="세금계산서·CRM용(선택)">
+          <Field label="대표자명"><TextInput value={d.rep_name} onChange={(e) => setD({ ...d, rep_name: e.target.value })} /></Field>
+          <Field label="거래처 구분">
+            <SelectInput value={d.partner_kind} onChange={(e) => setD({ ...d, partner_kind: e.target.value })}>
+              {Object.entries(PARTNER_KIND_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="업태"><TextInput value={d.biz_type} onChange={(e) => setD({ ...d, biz_type: e.target.value })} placeholder="서비스" /></Field>
+          <Field label="종목"><TextInput value={d.biz_item} onChange={(e) => setD({ ...d, biz_item: e.target.value })} placeholder="교육" /></Field>
+          <Field label="과세 유형">
+            <SelectInput value={d.tax_category} onChange={(e) => setD({ ...d, tax_category: e.target.value })}>
+              {Object.entries(TAX_CATEGORY_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="팝빌 CorpNum"><TextInput value={d.popbill_corpnum} onChange={(e) => setD({ ...d, popbill_corpnum: e.target.value })} placeholder="발행 주체(2차)" /></Field>
+          <div className="col-span-2"><Field label="주소"><TextInput value={d.address} onChange={(e) => setD({ ...d, address: e.target.value })} placeholder="사업장 주소" /></Field></div>
+          <div className="col-span-2"><Field label="상세주소"><TextInput value={d.address_detail} onChange={(e) => setD({ ...d, address_detail: e.target.value })} /></Field></div>
+          <Field label="세금계산서 이메일"><TextInput value={d.tax_email} onChange={(e) => setD({ ...d, tax_email: e.target.value })} placeholder="tax@example.com" /></Field>
+          <Field label="영업담당">
+            <SelectInput value={d.sales_rep_id} onChange={(e) => setD({ ...d, sales_rep_id: e.target.value })}>
+              <option value="">미지정</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </SelectInput>
+          </Field>
+        </FormSection>
+
+        {/* 5. 결제·금융 */}
+        <FormSection no={5} title="결제 · 금융" desc="정산·증빙 기준(선택)">
+          <Field label="결제 조건">
+            <SelectInput value={d.payment_terms} onChange={(e) => setD({ ...d, payment_terms: e.target.value })}>
+              <option value="">미지정</option>
+              {Object.entries(PAYMENT_TERMS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="결제 주기">
+            <SelectInput value={d.payment_cycle} onChange={(e) => setD({ ...d, payment_cycle: e.target.value })}>
+              <option value="">미지정</option>
+              {Object.entries(PAYMENT_CYCLE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="증빙 발행">
+            <SelectInput value={d.evidence_type} onChange={(e) => setD({ ...d, evidence_type: e.target.value })}>
+              <option value="">미지정</option>
+              {Object.entries(EVIDENCE_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="여신 한도"><NumberInput value={d.credit_limit} onChange={(v) => setD({ ...d, credit_limit: v })} placeholder="외상 한도" /></Field>
+          <Field label="거래 은행"><TextInput value={d.bank_name} onChange={(e) => setD({ ...d, bank_name: e.target.value })} /></Field>
+          <Field label="계좌번호"><TextInput value={d.account_no} onChange={(e) => setD({ ...d, account_no: e.target.value })} /></Field>
+          <Field label="예금주"><TextInput value={d.account_holder} onChange={(e) => setD({ ...d, account_holder: e.target.value })} /></Field>
+          <Field label="그룹/지역"><TextInput value={d.partner_group} onChange={(e) => setD({ ...d, partner_group: e.target.value })} placeholder="필터용" /></Field>
+        </FormSection>
+
+        {/* 6. 메모 */}
+        <FormSection no={6} title="메모">
           <div className="col-span-2">
             <textarea
               value={d.memo}

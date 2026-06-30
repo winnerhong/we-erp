@@ -69,6 +69,71 @@ export interface PartnerRow extends Timestamps {
   category: string | null;
   source_ref: string | null;
   default_tax_rate: number | null; // 기본 부가세율(%) — null=10% 취급
+  // CRM 확장(20260716)
+  rep_name: string | null;
+  biz_type: string | null;        // 업태
+  biz_item: string | null;        // 종목
+  postal_code: string | null;
+  address: string | null;
+  address_detail: string | null;
+  tax_email: string | null;
+  partner_kind: string | null;    // SALES/PURCHASE/BOTH/ETC
+  tax_category: string | null;    // TAXABLE/TAXFREE/ZERO
+  payment_terms: string | null;   // CASH/CARD/TRANSFER/NOTE/CREDIT
+  payment_cycle: string | null;   // IMMEDIATE/EOM/NEXT_EOM/QUARTER
+  credit_limit: number | null;
+  evidence_type: string | null;   // TAX_INVOICE/INVOICE/CASH_RECEIPT/NONE
+  bank_name: string | null;
+  account_no: string | null;
+  account_holder: string | null;
+  sales_rep_id: string | null;    // employees.id
+  partner_group: string | null;
+  credit_grade: string | null;
+  popbill_corpnum: string | null;
+}
+
+// ---------------- 거래처 CRM: 계약 / 거래내역 ----------------
+export type ContractType = "CLASS" | "EVENT" | "RENTAL";
+export type TxnStatus = "PLANNED" | "DONE" | "CANCELED";
+
+export interface ContractRow {
+  id: string;
+  company_id: string | null;
+  partner_id: string;
+  type: string;                   // ContractType
+  name: string;
+  status: string;                 // DRAFT/ACTIVE/ENDED
+  start_date: string | null;
+  end_date: string | null;
+  auto_renew: boolean;
+  settle_unit: string;            // MONTHLY/PER_ITEM
+  evidence_type: string | null;
+  instructor_id: string | null;
+  unit_price: number | null;
+  memo: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TransactionRow {
+  id: string;
+  company_id: string | null;
+  partner_id: string;
+  contract_id: string | null;
+  type: string;                   // ContractType | ETC
+  txn_date: string;
+  title: string | null;
+  qty: number;
+  unit_price: number;
+  amount: number;
+  instructor_id: string | null;
+  status: string;                 // TxnStatus
+  settlement_id: string | null;
+  tax_invoice_id: string | null;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface EmployeeRow extends Timestamps {
@@ -595,6 +660,8 @@ export interface Database {
       library_folders: TableShape<LibraryFolderRow, "name">;
       library_files: TableShape<LibraryFileRow, "title" | "file_name" | "storage_path">;
       library_favorites: TableShape<LibraryFavoriteRow, "profile_id" | "file_id">;
+      contracts: TableShape<ContractRow, "partner_id" | "name">;
+      transactions: TableShape<TransactionRow, "partner_id" | "txn_date">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

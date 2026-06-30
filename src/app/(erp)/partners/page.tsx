@@ -3,7 +3,7 @@ import { getImportCtx } from "@/lib/queries";
 import { getCompanyContext, companyFilter } from "@/lib/active-company";
 import { PartnersClient, type LedgerEntry } from "./partners-client";
 import { toPaybackBrief, type PaybackBrief } from "@/components/payback-list";
-import type { PartnerRow, FieldOptionRow, PaybackRow } from "@/lib/supabase/database.types";
+import type { PartnerRow, FieldOptionRow, PaybackRow, ContractRow, TransactionRow } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "거래처" };
 
@@ -21,11 +21,13 @@ export default async function PartnersPage({
   // 특정 사업자 선택 시: 해당 사업자 전용 + 공용(company_id IS NULL) 함께 표시
   if (filter) query = query.or(`company_id.eq.${filter},company_id.is.null`);
 
-  const [{ data, error }, ctx, { data: opts }] = await Promise.all([
+  const [{ data, error }, ctx, { data: opts }, { data: empData }] = await Promise.all([
     query,
     getImportCtx(),
     supabase.from("field_options").select("*").eq("category", "partner_category").order("sort_order"),
+    supabase.from("employees").select("id, name").eq("is_active", true).order("name"),
   ]);
+  const employees = (empData ?? []) as { id: string; name: string }[];
   if (error) {
     return <p className="text-sm text-red-600">데이터를 불러오지 못했습니다: {error.message}</p>;
   }
@@ -35,9 +37,17 @@ export default async function PartnersPage({
   // 선택 거래처의 거래원장(통장·계산서·영수증·구매) — 선택된 것만 로드
   let entries: LedgerEntry[] = [];
   let paybacks: PaybackBrief[] = [];
+  let contracts: ContractRow[] = [];
+  let transactions: TransactionRow[] = [];
   let receivable = 0;
   let payable = 0;
   if (selectedId) {
+    const [{ data: cData }, { data: tData }] = await Promise.all([
+      supabase.from("contracts").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
+      supabase.from("transactions").select("*").eq("partner_id", selectedId).order("txn_date", { ascending: false }),
+    ]);
+    contracts = (cData ?? []) as ContractRow[];
+    transactions = (tData ?? []) as TransactionRow[];
     const [{ data: tax }, { data: rcpt }, { data: bank }, { data: buy }] = await Promise.all([
       supabase.from("tax_invoices").select("id, type, total_amount, status, doc_date, memo").eq("partner_id", selectedId),
       supabase.from("receipts").select("id, total_amount, status, doc_date, vendor_name, memo").eq("partner_id", selectedId),
@@ -141,10 +151,14 @@ export default async function PartnersPage({
     <PartnersClient
       rows={rows}
       ctx={ctx}
+      activeCompanyId={filter}
       options={(opts ?? []) as FieldOptionRow[]}
       selectedId={selectedId}
       entries={entries}
       paybacks={paybacks}
+      contracts={contracts}
+      transactions={transactions}
+      employees={employees}
       receivable={receivable}
       payable={payable}
     />
