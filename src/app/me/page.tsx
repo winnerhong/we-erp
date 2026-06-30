@@ -42,15 +42,25 @@ export default async function MePage() {
   const emp = g.employee;
   const db = createAdminClient();
 
+  // ---- 기간 prep(순수 계산) ----
+  const today = kstToday();
+  const windowStart = new Date(`${today}T00:00:00`);
+  windowStart.setDate(windowStart.getDate() - 56);
+  const winStart = windowStart.toISOString().slice(0, 10);
+  const sFrom = new Date(`${today}T00:00:00`); sFrom.setDate(sFrom.getDate() - 14);
+  const sTo = new Date(`${today}T00:00:00`); sTo.setDate(sTo.getDate() + 30);
+  const sFromY = sFrom.toISOString().slice(0, 10);
+  const sToY = sTo.toISOString().slice(0, 10);
+
+  // ---- 1차 병렬: emp/profile/기간만 의존하는 모든 쿼리 한 번에 ----
   const [
-    { data: pays },
-    { data: leaves },
-    { data: certs },
-    { data: contracts },
-    { data: docs },
-    { data: events },
-    { data: pbs },
-    { data: company },
+    { data: pays }, { data: leaves }, { data: certs }, { data: contracts }, { data: docs }, { data: events }, { data: pbs }, { data: company },
+    { data: tpls }, { data: docIssues }, { data: foRows },
+    { data: attRows },
+    { data: asg }, { data: taskCats },
+    { data: coworkers },
+    { data: libFolders }, { data: libFilesRaw }, { data: libFavs },
+    { data: sessRaw },
   ] = await Promise.all([
     db.from("payrolls").select("*").eq("employee_id", emp.id).order("year_month", { ascending: false }),
     db.from("leave_requests").select("*").eq("employee_id", emp.id).order("start_date", { ascending: false }),
@@ -62,14 +72,21 @@ export default async function MePage() {
     emp.company_id
       ? db.from("companies").select("id, name, biz_no, ceo_name, address, biz_type, biz_category").eq("id", emp.company_id).maybeSingle()
       : Promise.resolve({ data: null }),
-  ]);
-
-  // 서류 — 양식(전사 공용) + 본인 발행본 + 변수 라벨
-  const [{ data: tpls }, { data: docIssues }, { data: foRows }] = await Promise.all([
     db.from("document_templates").select("*").eq("is_active", true).order("sort_order").order("created_at"),
     db.from("document_issues").select("*").eq("employee_id", emp.id).order("created_at", { ascending: false }),
     db.from("field_options").select("*").in("category", ["employment_type", "job_rank", "job_title", "department"]),
+    db.from("attendance").select("*").eq("employee_id", emp.id).gte("work_date", winStart).order("work_date", { ascending: false }),
+    db.from("task_assignees").select("task_id").eq("employee_id", emp.id),
+    db.from("field_options").select("value, label, color").eq("category", "task_category").eq("is_active", true).order("sort_order"),
+    emp.company_id
+      ? db.from("employees").select("id, name, company_id, department, job_rank, job_title, is_manager, photo_url, phone, email, hired_on").eq("is_active", true).eq("company_id", emp.company_id).order("name")
+      : Promise.resolve({ data: [] }),
+    db.from("library_folders").select("*").order("sort_order"),
+    db.from("library_files").select("*").eq("is_active", true).order("created_at", { ascending: false }),
+    db.from("library_favorites").select("file_id").eq("profile_id", g.profile!.id),
+    db.from("transactions").select("*").eq("instructor_id", emp.id).eq("type", "CLASS").gte("txn_date", sFromY).lte("txn_date", sToY).order("txn_date"),
   ]);
+
   const labelOf = (cat: string): Record<string, string> =>
     Object.fromEntries(((foRows ?? []) as FieldOptionRow[]).filter((o) => o.category === cat).map((o) => [o.value, o.label]));
   const docLabels: VarLabels = {
@@ -84,19 +101,23 @@ export default async function MePage() {
   const rankLabel = labelOf("job_rank")[emp.job_rank ?? ""] ?? emp.job_rank ?? "";
   const username = g.profile?.username ?? null;
 
-  // 근태 — 최근 8주 출퇴근 기록(주간/월간 뷰 공용) + 오늘
-  const today = kstToday();
-  const windowStart = new Date(`${today}T00:00:00`);
-  windowStart.setDate(windowStart.getDate() - 56);
-  const winStart = windowStart.toISOString().slice(0, 10);
-  const { data: attRows } = await db
-    .from("attendance")
-    .select("*")
-    .eq("employee_id", emp.id)
-    .gte("work_date", winStart)
-    .order("work_date", { ascending: false });
+  // 근태(1차 배치에서 로드) — 최근 8주
   const attendance = (attRows ?? []) as AttendanceRow[];
   const todayAtt = attendance.find((a) => a.work_date === today) ?? null;
+
+  // ---- 2차 병렬: 1차 결과(pbs/asg/sessRaw)에 의존하는 조회 ----
+  const pbRows = (pbs ?? []) as PaybackRow[];
+  const txnIds = [...new Set(pbRows.map((p) => p.bank_transaction_id).filter((v): v is string => !!v))];
+  const myTaskIds = [...new Set(((asg ?? []) as { task_id: string }[]).map((a) => a.task_id))];
+  const sessRows = (sessRaw ?? []) as TransactionRow[];
+  const sessPartnerIds = [...new Set(sessRows.map((s) => s.partner_id))];
+  const [{ data: pbTxnData }, { data: tk }, { data: ck }, { data: cm }, { data: sessPs }] = await Promise.all([
+    txnIds.length ? db.from("bank_transactions").select("id, txn_date, description").in("id", txnIds) : Promise.resolve({ data: [] }),
+    myTaskIds.length ? db.from("tasks").select("*").in("id", myTaskIds).order("due_date", { nullsFirst: false }) : Promise.resolve({ data: [] }),
+    myTaskIds.length ? db.from("task_checklist").select("*").in("task_id", myTaskIds).order("sort_order") : Promise.resolve({ data: [] }),
+    myTaskIds.length ? db.from("task_comments").select("*").in("task_id", myTaskIds).order("created_at") : Promise.resolve({ data: [] }),
+    sessPartnerIds.length ? db.from("partners").select("id, name").in("id", sessPartnerIds) : Promise.resolve({ data: [] }),
+  ]);
 
   // 최근 8주 승인 휴가 날짜(근태에 '휴가'로 표시)
   const leaveDates: string[] = [];
@@ -114,31 +135,17 @@ export default async function MePage() {
     : null;
 
   // 포인트(페이백) — 출처 거래일·적요 보강
-  const pbRows = (pbs ?? []) as PaybackRow[];
-  const txnIds = [...new Set(pbRows.map((p) => p.bank_transaction_id).filter((v): v is string => !!v))];
   const pbDate = new Map<string, string>();
   const pbDesc = new Map<string, string>();
-  if (txnIds.length > 0) {
-    const { data: t } = await db.from("bank_transactions").select("id, txn_date, description").in("id", txnIds);
-    for (const r of (t ?? []) as { id: string; txn_date: string; description: string | null }[]) {
-      pbDate.set(r.id, r.txn_date);
-      pbDesc.set(r.id, r.description ?? "");
-    }
+  for (const r of (pbTxnData ?? []) as { id: string; txn_date: string; description: string | null }[]) {
+    pbDate.set(r.id, r.txn_date);
+    pbDesc.set(r.id, r.description ?? "");
   }
   const paybacks: PaybackBrief[] = pbRows.map((p) => toPaybackBrief(p, pbDate, pbDesc));
 
-  // 내 업무(담당 배정된 업무) + 체크리스트·댓글 + 업무 분류
-  const { data: asg } = await db.from("task_assignees").select("task_id").eq("employee_id", emp.id);
-  const myTaskIds = [...new Set(((asg ?? []) as { task_id: string }[]).map((a) => a.task_id))];
+  // 내 업무(담당 배정된 업무) + 체크리스트·댓글 (2차 배치 결과)
   let myTasks: MyTask[] = [];
-  const { data: taskCats } = await db
-    .from("field_options").select("value, label, color").eq("category", "task_category").eq("is_active", true).order("sort_order");
   if (myTaskIds.length > 0) {
-    const [{ data: tk }, { data: ck }, { data: cm }] = await Promise.all([
-      db.from("tasks").select("*").in("id", myTaskIds).order("due_date", { nullsFirst: false }),
-      db.from("task_checklist").select("*").in("task_id", myTaskIds).order("sort_order"),
-      db.from("task_comments").select("*").in("task_id", myTaskIds).order("created_at"),
-    ]);
     const chkBy = new Map<string, TaskChecklistRow[]>();
     for (const c of (ck ?? []) as TaskChecklistRow[]) { const a = chkBy.get(c.task_id) ?? []; a.push(c); chkBy.set(c.task_id, a); }
     const cmtBy = new Map<string, TaskCommentRow[]>();
@@ -151,15 +158,9 @@ export default async function MePage() {
     }));
   }
 
-  // 조직도 — 같은 사업자 동료(읽기전용)
+  // 조직도 — 같은 사업자 동료(1차 배치에서 로드)
   let orgEmployees: OrgEmployee[] = [];
   if (emp.company_id) {
-    const { data: coworkers } = await db
-      .from("employees")
-      .select("id, name, company_id, department, job_rank, job_title, is_manager, photo_url, phone, email, hired_on")
-      .eq("is_active", true)
-      .eq("company_id", emp.company_id)
-      .order("name");
     const fo = (foRows ?? []) as FieldOptionRow[];
     const lbl = (cat: string, v: string | null) => (v ? fo.find((o) => o.category === cat && o.value === v)?.label ?? v : null);
     const rankSort = (v: string | null) => (v ? fo.find((o) => o.category === "job_rank" && o.value === v)?.sort_order ?? 999 : 999);
@@ -172,12 +173,7 @@ export default async function MePage() {
     }));
   }
 
-  // 자료실 — 이 직원에게 보이는 파일(공개범위) + 폴더 + 즐겨찾기
-  const [{ data: libFolders }, { data: libFilesRaw }, { data: libFavs }] = await Promise.all([
-    db.from("library_folders").select("*").order("sort_order"),
-    db.from("library_files").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-    db.from("library_favorites").select("file_id").eq("profile_id", g.profile!.id),
-  ]);
+  // 자료실 — 이 직원에게 보이는 파일(1차 배치에서 로드)
   const empScope = { company_id: emp.company_id, department: emp.department };
   const orgCoName = (company as { name: string } | null)?.name ?? null;
   const libFiles: LibFile[] = ((libFilesRaw ?? []) as LibraryFileRow[])
@@ -193,23 +189,9 @@ export default async function MePage() {
   const libFolderRows: LibFolder[] = ((libFolders ?? []) as LibraryFolderRow[]).map((f) => ({ id: f.id, name: f.name, parentId: f.parent_id }));
   const libFavorites = ((libFavs ?? []) as LibraryFavoriteRow[]).map((f) => f.file_id);
 
-  // 현장 수집 — 강사 본인에게 배정된 체육수업 회차(최근 14일~향후 30일)
-  const sFrom = new Date(`${today}T00:00:00`); sFrom.setDate(sFrom.getDate() - 14);
-  const sTo = new Date(`${today}T00:00:00`); sTo.setDate(sTo.getDate() + 30);
-  const sFromY = sFrom.toISOString().slice(0, 10);
-  const sToY = sTo.toISOString().slice(0, 10);
-  const { data: sessRaw } = await db
-    .from("transactions").select("*")
-    .eq("instructor_id", emp.id).eq("type", "CLASS")
-    .gte("txn_date", sFromY).lte("txn_date", sToY)
-    .order("txn_date");
-  const sessRows = (sessRaw ?? []) as TransactionRow[];
-  const sessPartnerIds = [...new Set(sessRows.map((s) => s.partner_id))];
+  // 현장 수집 — 강사 본인 수업 회차(1차 배치 로드) + 기관명(2차 배치)
   const sessPartnerName = new Map<string, string>();
-  if (sessPartnerIds.length > 0) {
-    const { data: ps } = await db.from("partners").select("id, name").in("id", sessPartnerIds);
-    for (const p of (ps ?? []) as { id: string; name: string }[]) sessPartnerName.set(p.id, p.name);
-  }
+  for (const p of (sessPs ?? []) as { id: string; name: string }[]) sessPartnerName.set(p.id, p.name);
   const mySessions: MyClassSession[] = sessRows.map((s) => ({
     id: s.id, date: s.txn_date, title: s.title, partnerName: sessPartnerName.get(s.partner_id) ?? "",
     status: s.status, presentCount: s.present_count, progressNote: s.progress_note,

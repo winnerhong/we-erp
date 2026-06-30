@@ -40,24 +40,42 @@ export default async function DashboardPage() {
   const inMonth = (d: string | null) => !!d && d >= first && d < next;
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-  // 스코프 데이터 로드
-  let rcptQ = supabase.from("receipts").select("status,total_amount,doc_date,company_id");
-  let taxQ = supabase.from("tax_invoices").select("id,type,status,vat_amount,total_amount,doc_date,due_date,settled_at,company_id");
-  let purQ = supabase.from("purchase_requests").select("status,company_id");
-  let lvQ = supabase.from("leave_requests").select("status,company_id");
-  if (filter) {
-    rcptQ = rcptQ.eq("company_id", filter);
-    taxQ = taxQ.eq("company_id", filter);
-    purQ = purQ.eq("company_id", filter);
-    lvQ = lvQ.eq("company_id", filter);
+  // ---- 기간 prep(순수 계산) ----
+  const trendMonths: { key: string; label: string }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    trendMonths.push({ key: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`, label: `${dt.getMonth() + 1}월` });
   }
+  const sixStart = `${trendMonths[0].key}-01`;
+  const d30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30);
+  const d30s = `${d30.getFullYear()}-${String(d30.getMonth() + 1).padStart(2, "0")}-${String(d30.getDate()).padStart(2, "0")}`;
+  const d7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+  const d7s = `${d7.getFullYear()}-${String(d7.getMonth() + 1).padStart(2, "0")}-${String(d7.getDate()).padStart(2, "0")}`;
 
-  const [companiesRes, rcpt, tax, pur, lv, partnerCnt, empCnt, acctCnt] = await Promise.all([
+  // ---- 쿼리 빌더(사업자 스코프) ----
+  const scope = <T extends { eq: (c: string, v: string) => T }>(q: T): T => (filter ? q.eq("company_id", filter) : q);
+  const rcptQ = scope(supabase.from("receipts").select("status,total_amount,doc_date,company_id"));
+  const taxQ = scope(supabase.from("tax_invoices").select("id,type,status,vat_amount,total_amount,doc_date,due_date,settled_at,company_id"));
+  const purQ = scope(supabase.from("purchase_requests").select("status,company_id"));
+  const lvQ = scope(supabase.from("leave_requests").select("status,company_id"));
+  const attTodayQ = scope(supabase.from("attendance").select("status, check_in, check_out").eq("work_date", today));
+  const taskQ = scope(supabase.from("tasks").select("status, due_date").neq("status", "DONE"));
+  const txnQ = scope(supabase.from("transactions").select("amount, status, settlement_id, txn_date, type").neq("status", "CANCELED"));
+  const setQ = scope(supabase.from("settlements").select("total, status"));
+  const openRentQ = scope(supabase.from("asset_movements").select("id", { count: "exact", head: true }).eq("status", "OPEN"));
+  const expireQ = scope(supabase.from("contracts").select("id", { count: "exact", head: true }).eq("status", "ACTIVE").gte("end_date", today).lte("end_date", d30s));
+  const eventQ = scope(supabase.from("contracts").select("detail, status").eq("type", "EVENT").neq("status", "ENDED"));
+  const settledQ = scope(supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null));
+  const tTrendQ = scope(supabase.from("tax_invoices").select("type,total_amount,doc_date").gte("doc_date", sixStart).lt("doc_date", next));
+  const rTrendQ = scope(supabase.from("receipts").select("total_amount,doc_date,status").eq("status", "CONFIRMED").gte("doc_date", sixStart).lt("doc_date", next));
+
+  // ---- 단일 병렬 로드(독립 쿼리 전부 한 번에) ----
+  const [
+    companiesRes, rcpt, tax, pur, lv, partnerCnt, empCnt, acctCnt,
+    attRes, taskRes, txnRes, setRes, openRentRes, expireRes, eventRes, settledRes, tTrend, rTrend,
+  ] = await Promise.all([
     supabase.from("companies").select("id,name").eq("is_active", true).order("name"),
-    rcptQ,
-    taxQ,
-    purQ,
-    lvQ,
+    rcptQ, taxQ, purQ, lvQ,
     filter
       ? supabase.from("partners").select("*", { count: "exact", head: true }).or(`company_id.eq.${filter},company_id.is.null`)
       : supabase.from("partners").select("*", { count: "exact", head: true }),
@@ -65,34 +83,25 @@ export default async function DashboardPage() {
       ? supabase.from("employees").select("*", { count: "exact", head: true }).eq("is_active", true).eq("company_id", filter)
       : supabase.from("employees").select("*", { count: "exact", head: true }).eq("is_active", true),
     supabase.from("accounts").select("*", { count: "exact", head: true }).eq("is_active", true),
+    attTodayQ, taskQ, txnQ, setQ, openRentQ, expireQ, eventQ, settledQ, tTrendQ, rTrendQ,
   ]);
 
   const companies = (companiesRes.data ?? []) as { id: string; name: string }[];
 
   // 오늘 근태 요약
-  let attTodayQ = supabase.from("attendance").select("status, check_in, check_out").eq("work_date", today);
-  if (filter) attTodayQ = attTodayQ.eq("company_id", filter);
-  const { data: attTodayData } = await attTodayQ;
-  const attRows = (attTodayData ?? []) as { status: string; check_in: string | null; check_out: string | null }[];
+  const attRows = (attRes.data ?? []) as { status: string; check_in: string | null; check_out: string | null }[];
   const attWorked = attRows.filter((a) => a.check_in).length;
   const attLate = attRows.filter((a) => a.status === "LATE" || a.status === "LATE_EARLY").length;
   const attOut = attRows.filter((a) => a.check_out).length;
 
   // 업무 요약(미완료 중 지연·오늘 마감)
-  let taskQ = supabase.from("tasks").select("status, due_date").neq("status", "DONE");
-  if (filter) taskQ = taskQ.eq("company_id", filter);
-  const { data: taskData } = await taskQ;
-  const openTasks = (taskData ?? []) as { status: string; due_date: string | null }[];
+  const openTasks = (taskRes.data ?? []) as { status: string; due_date: string | null }[];
   const taskOverdue = openTasks.filter((t) => t.due_date && t.due_date < today).length;
   const taskToday = openTasks.filter((t) => t.due_date === today).length;
 
   // 거래/정산 요약(거래처 CRM)
-  let txnQ = supabase.from("transactions").select("amount, status, settlement_id, txn_date, type").neq("status", "CANCELED");
-  let setQ = supabase.from("settlements").select("total, status");
-  if (filter) { txnQ = txnQ.eq("company_id", filter); setQ = setQ.eq("company_id", filter); }
-  const [{ data: txnData }, { data: setData }] = await Promise.all([txnQ, setQ]);
-  const txnRows = (txnData ?? []) as { amount: number; status: string; settlement_id: string | null; txn_date: string; type: string }[];
-  const setRows = (setData ?? []) as { total: number; status: string }[];
+  const txnRows = (txnRes.data ?? []) as { amount: number; status: string; settlement_id: string | null; txn_date: string; type: string }[];
+  const setRows = (setRes.data ?? []) as { total: number; status: string }[];
   const todaySessions = txnRows.filter((t) => t.type === "CLASS" && t.txn_date === today);
   const sessionsDone = todaySessions.filter((t) => t.status === "DONE").length;
   const txnThisMonth = txnRows.filter((t) => inMonth(t.txn_date)).reduce((s, t) => s + t.amount, 0);
@@ -101,51 +110,18 @@ export default async function DashboardPage() {
   const hasCrm = txnRows.length > 0 || setRows.length > 0;
 
   // 운영 알림(미반납 교구·만료 임박 계약·임박 행사)
-  const d30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30);
-  const d30s = `${d30.getFullYear()}-${String(d30.getMonth() + 1).padStart(2, "0")}-${String(d30.getDate()).padStart(2, "0")}`;
-  const d7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
-  const d7s = `${d7.getFullYear()}-${String(d7.getMonth() + 1).padStart(2, "0")}-${String(d7.getDate()).padStart(2, "0")}`;
-  let openRentQ = supabase.from("asset_movements").select("id", { count: "exact", head: true }).eq("status", "OPEN");
-  let expireQ = supabase.from("contracts").select("id", { count: "exact", head: true }).eq("status", "ACTIVE").gte("end_date", today).lte("end_date", d30s);
-  let eventQ = supabase.from("contracts").select("detail, status").eq("type", "EVENT").neq("status", "ENDED");
-  if (filter) { openRentQ = openRentQ.eq("company_id", filter); expireQ = expireQ.eq("company_id", filter); eventQ = eventQ.eq("company_id", filter); }
-  const [{ count: openRentals }, { count: expiringContracts }, { data: evData }] = await Promise.all([openRentQ, expireQ, eventQ]);
-  const upcomingEvents = ((evData ?? []) as { detail: Record<string, unknown> }[]).filter((e) => {
+  const openRentals = openRentRes.count;
+  const expiringContracts = expireRes.count;
+  const upcomingEvents = ((eventRes.data ?? []) as { detail: Record<string, unknown> }[]).filter((e) => {
     const ed = e.detail?.event_date;
     return typeof ed === "string" && ed >= today && ed <= d7s;
   }).length;
   const hasOps = (openRentals ?? 0) > 0 || (expiringContracts ?? 0) > 0 || upcomingEvents > 0;
 
   // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용
-  let settledQ = supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null);
-  if (filter) settledQ = settledQ.eq("company_id", filter);
-  const { data: settledData } = await settledQ;
-  const settledIds = new Set(
-    ((settledData ?? []) as { tax_invoice_id: string }[]).map((b) => b.tax_invoice_id)
-  );
+  const settledIds = new Set(((settledRes.data ?? []) as { tax_invoice_id: string }[]).map((b) => b.tax_invoice_id));
 
   // ----- 최근 6개월 추세(매출 vs 지출) -----
-  const trendMonths: { key: string; label: string }[] = [];
-  for (let i = 5; i >= 0; i--) {
-    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    trendMonths.push({
-      key: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`,
-      label: `${dt.getMonth() + 1}월`,
-    });
-  }
-  const sixStart = `${trendMonths[0].key}-01`;
-  let tTrendQ = supabase.from("tax_invoices").select("type,total_amount,doc_date").gte("doc_date", sixStart).lt("doc_date", next);
-  let rTrendQ = supabase
-    .from("receipts")
-    .select("total_amount,doc_date,status")
-    .eq("status", "CONFIRMED")
-    .gte("doc_date", sixStart)
-    .lt("doc_date", next);
-  if (filter) {
-    tTrendQ = tTrendQ.eq("company_id", filter);
-    rTrendQ = rTrendQ.eq("company_id", filter);
-  }
-  const [tTrend, rTrend] = await Promise.all([tTrendQ, rTrendQ]);
   const salesBy: Record<string, number> = {};
   const spendBy: Record<string, number> = {};
   for (const t of (tTrend.data ?? []) as { type: string; total_amount: number; doc_date: string | null }[]) {
