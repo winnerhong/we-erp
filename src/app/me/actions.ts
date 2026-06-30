@@ -184,6 +184,36 @@ export async function updateMyPhoto(dataUrl: string | null): Promise<Result> {
   return { ok: true };
 }
 
+/** 강사 본인 수업 회차 현장기록 — 출석·진도 + 완료 체크. instructor_id 일치 검증. */
+export async function saveSession(
+  txnId: string,
+  input: { present_count?: string | null; progress_note?: string | null; done?: boolean }
+): Promise<Result> {
+  const g = await ensureSelf();
+  if (g.error || !g.employee) return { ok: false, error: g.error ?? "직원 정보 없음" };
+  const db = createAdminClient();
+  const { data: row } = await db.from("transactions").select("instructor_id").eq("id", txnId).maybeSingle();
+  const instructorId = (row as { instructor_id: string | null } | null)?.instructor_id;
+  if (!instructorId || instructorId !== g.employee.id) return { ok: false, error: "본인에게 배정된 수업만 기록할 수 있습니다." };
+
+  const present = input.present_count != null && input.present_count !== ""
+    ? Math.max(0, parseInt(String(input.present_count).replace(/[^\d]/g, ""), 10) || 0)
+    : null;
+  const patch: Record<string, unknown> = {
+    present_count: present,
+    progress_note: input.progress_note?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  if (input.done === true) { patch.status = "DONE"; patch.completed_at = new Date().toISOString(); }
+  else if (input.done === false) { patch.status = "PLANNED"; patch.completed_at = null; }
+
+  const { error } = await db.from("transactions").update(patch as never).eq("id", txnId).eq("instructor_id", g.employee.id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/me");
+  revalidatePath("/partners");
+  return { ok: true };
+}
+
 /** 본인 인사카드 저장 — 신상 스칼라(화이트리스트) + 반복항목(hr_extra). 즉시 회사 기록에 반영. */
 export async function saveMyHrCard(
   scalars: Record<string, string | null>,

@@ -15,6 +15,7 @@ export const MENUS: MenuItem[] = [
   { href: "/finance", label: "받을돈·줄돈", icon: "💵" },
   { href: "/companies", label: "사업자", icon: "🏢" },
   { href: "/partners", label: "거래처", icon: "🤝" },
+  { href: "/students", label: "원생", icon: "🧒" },
   { href: "/employees", label: "직원", icon: "👥" },
   { href: "/org", label: "조직도", icon: "🏢" },
   { href: "/accounts", label: "계정과목", icon: "📒" },

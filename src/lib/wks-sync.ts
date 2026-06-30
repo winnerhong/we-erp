@@ -211,3 +211,55 @@ export async function runTeacherSync(): Promise<SyncResult> {
 
   return { ok: true, counts, total: processed, skipped };
 }
+
+/** winner-kids `members`(원생) → students upsert (단방향, source_ref 멱등). */
+export async function runStudentSync(): Promise<SyncResult> {
+  const url = process.env.WKS_SUPABASE_URL;
+  const key = process.env.WKS_SUPABASE_SERVICE_KEY;
+  const counts: Record<string, number> = {};
+  const skipped: string[] = [];
+  if (!url || !key)
+    return { ok: false, error: "WKS_SUPABASE_URL/KEY 미설정", counts, total: 0, skipped };
+
+  const src = createSbClient(url, key, { auth: { persistSession: false } });
+  const { data, error } = await src.from("members").select("*");
+  if (error) return { ok: false, error: `원생 조회 실패: ${error.message}`, counts, total: 0, skipped };
+
+  const rows = (data ?? []) as Row[];
+  const mapped = rows.map((m) => {
+    const status = m.is_on_leave
+      ? "휴원"
+      : m.is_enrolled === false || m.withdrawal_date
+        ? "퇴원"
+        : "재원";
+    return {
+      source_ref: `wks:members:${m.id}`,
+      company_id: null,
+      is_active: true,
+      name: s(m.name) ?? "(이름없음)",
+      gender: s(m.gender),
+      birthday: m.birthday ?? null,
+      school: s(m.school),
+      grade: s(m.grade),
+      class_name: s(m.class_name),
+      guardian_name: s(m.guardian_name),
+      guardian_phone: s(m.guardian_phone),
+      student_phone: s(m.student_phone),
+      address: clean([s(m.address1), s(m.address2)], " "),
+      status,
+      enrollment_date: m.enrollment_date ?? null,
+      homeroom_teacher: s(m.homeroom_teacher),
+      memo: s(m.memo),
+    };
+  });
+  counts["원생"] = mapped.length;
+  if (mapped.length === 0) return { ok: true, counts, total: 0, skipped };
+
+  const db = createAdminClient();
+  const { error: upErr } = await db
+    .from("students")
+    .upsert(mapped as never[], { onConflict: "source_ref" });
+  if (upErr) return { ok: false, error: `저장 실패: ${upErr.message}`, counts, total: 0, skipped };
+
+  return { ok: true, counts, total: mapped.length, skipped };
+}

@@ -5,7 +5,8 @@ import { MeClient, type MyTask } from "./me-client";
 import type { OrgEmployee } from "@/components/org-chart";
 import type { LibFile, LibFolder } from "@/components/library-browser";
 import { fileVisibleTo } from "@/lib/library";
-import type { LibraryFileRow, LibraryFolderRow, LibraryFavoriteRow } from "@/lib/supabase/database.types";
+import type { LibraryFileRow, LibraryFolderRow, LibraryFavoriteRow, TransactionRow } from "@/lib/supabase/database.types";
+import type { MyClassSession } from "./me-client";
 import { kstToday } from "@/lib/attendance";
 import type { VarCompany, VarLabels } from "@/lib/document-vars";
 import type {
@@ -192,6 +193,28 @@ export default async function MePage() {
   const libFolderRows: LibFolder[] = ((libFolders ?? []) as LibraryFolderRow[]).map((f) => ({ id: f.id, name: f.name, parentId: f.parent_id }));
   const libFavorites = ((libFavs ?? []) as LibraryFavoriteRow[]).map((f) => f.file_id);
 
+  // 현장 수집 — 강사 본인에게 배정된 체육수업 회차(최근 14일~향후 30일)
+  const sFrom = new Date(`${today}T00:00:00`); sFrom.setDate(sFrom.getDate() - 14);
+  const sTo = new Date(`${today}T00:00:00`); sTo.setDate(sTo.getDate() + 30);
+  const sFromY = sFrom.toISOString().slice(0, 10);
+  const sToY = sTo.toISOString().slice(0, 10);
+  const { data: sessRaw } = await db
+    .from("transactions").select("*")
+    .eq("instructor_id", emp.id).eq("type", "CLASS")
+    .gte("txn_date", sFromY).lte("txn_date", sToY)
+    .order("txn_date");
+  const sessRows = (sessRaw ?? []) as TransactionRow[];
+  const sessPartnerIds = [...new Set(sessRows.map((s) => s.partner_id))];
+  const sessPartnerName = new Map<string, string>();
+  if (sessPartnerIds.length > 0) {
+    const { data: ps } = await db.from("partners").select("id, name").in("id", sessPartnerIds);
+    for (const p of (ps ?? []) as { id: string; name: string }[]) sessPartnerName.set(p.id, p.name);
+  }
+  const mySessions: MyClassSession[] = sessRows.map((s) => ({
+    id: s.id, date: s.txn_date, title: s.title, partnerName: sessPartnerName.get(s.partner_id) ?? "",
+    status: s.status, presentCount: s.present_count, progressNote: s.progress_note,
+  }));
+
   return (
     <MeClient
       employee={emp}
@@ -220,6 +243,7 @@ export default async function MePage() {
       libFiles={libFiles}
       libFolders={libFolderRows}
       libFavorites={libFavorites}
+      mySessions={mySessions}
     />
   );
 }

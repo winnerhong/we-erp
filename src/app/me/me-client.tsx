@@ -24,7 +24,7 @@ import { DocumentIssuePanel } from "@/components/document-issue-panel";
 import {
   ATT_STATUS_LABEL, ATT_STATUS_TONE, WORK_MODE_LABEL, WORK_MODES, fmtDuration, calcAttendance,
 } from "@/lib/attendance";
-import { requestLeave, cancelMyLeave, issueMyCertificate, clockIn, clockOut, setWorkMode, saveMyHrCard, updateMyPhoto } from "./actions";
+import { requestLeave, cancelMyLeave, issueMyCertificate, clockIn, clockOut, setWorkMode, saveMyHrCard, updateMyPhoto, saveSession } from "./actions";
 import { createMyIssue, saveMySignedFile, deleteMyIssue } from "@/app/(erp)/documents/actions";
 import { HrCardEditor } from "@/components/hr-card-editor";
 import { normalizeHrExtra, HR_SCALAR_FIELDS, type HrScalarField } from "@/lib/hr-card";
@@ -39,7 +39,17 @@ import {
 import { OrgChart, type OrgEmployee } from "@/components/org-chart";
 import { LibraryBrowser, type LibFile, type LibFolder } from "@/components/library-browser";
 
-type Tab = "att" | "task" | "org" | "library" | "info" | "pay" | "point" | "leave" | "docs" | "history";
+type Tab = "att" | "class" | "task" | "org" | "library" | "info" | "pay" | "point" | "leave" | "docs" | "history";
+
+export interface MyClassSession {
+  id: string;
+  date: string;
+  title: string | null;
+  partnerName: string;
+  status: string;
+  presentCount: number | null;
+  progressNote: string | null;
+}
 
 export interface MyTask {
   id: string;
@@ -83,6 +93,7 @@ export function MeClient({
   libFiles,
   libFolders,
   libFavorites,
+  mySessions,
 }: {
   employee: EmployeeRow;
   companyName: string | null;
@@ -110,17 +121,22 @@ export function MeClient({
   libFiles: LibFile[];
   libFolders: LibFolder[];
   libFavorites: string[];
+  mySessions: MyClassSession[];
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("att");
+  const isInstructor = mySessions.length > 0;
+  const [tab, setTab] = useState<Tab>(isInstructor ? "class" : "att");
   const emp = employee;
   const todayLeave = leaveDates.includes(today) && !todayAtt?.check_in;
+  const visibleTabs: { key: Tab; label: string; icon: string }[] = isInstructor
+    ? [{ key: "class", label: "수업", icon: "📋" }, ...TABS]
+    : TABS;
 
   return (
     <div className="space-y-4">
       {/* 상단 가로 메뉴 */}
       <nav className="sticky top-0 z-10 -mx-1 flex gap-1 overflow-x-auto rounded-2xl border border-neutral-200 bg-white/90 p-1.5 backdrop-blur">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
@@ -144,6 +160,7 @@ export function MeClient({
         {/* 우측 콘텐츠 */}
         <main className="min-w-0 space-y-4">
         {tab === "att" && <AttendanceContent today={today} rows={attendance} leaveDates={leaveDates} />}
+        {tab === "class" && <MyClassesTab sessions={mySessions} today={today} />}
         {tab === "task" && <MyTasksTab tasks={myTasks} categories={taskCategories} meIds={meIds} today={today} />}
         {tab === "org" && (
           <section className="space-y-3">
@@ -205,6 +222,95 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "docs", label: "서류", icon: "📄" },
   { key: "history", label: "인사이력", icon: "📌" },
 ];
+
+// ===== 현장 수집(강사 수업 출석·진도) =====
+function MyClassesTab({ sessions, today }: { sessions: MyClassSession[]; today: string }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  const todayList = sessions.filter((s) => s.date === today);
+  const upcoming = sessions.filter((s) => s.date > today);
+  const past = sessions.filter((s) => s.date < today);
+  const doneCount = sessions.filter((s) => s.status === "DONE").length;
+  const runSave = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
+    startTransition(async () => { const r = await fn(); if (!r.ok) alert(r.error); else router.refresh(); });
+
+  const section = (title: string, list: MyClassSession[], defaultOpenToday?: boolean) => {
+    if (list.length === 0) return null;
+    return (
+      <section className="space-y-2" key={title}>
+        <h4 className="text-sm font-semibold text-neutral-500">{title} <span className="text-neutral-400">{list.length}</span></h4>
+        {list.map((s) => (
+          <SessionCard key={s.id} s={s} expanded={openId === s.id || (!!defaultOpenToday && openId === null && s.date === today)}
+            onToggle={() => setOpenId((p) => (p === s.id ? null : s.id))} run={runSave} pending={pending} />
+        ))}
+      </section>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-3">
+        <h3 className="font-semibold text-neutral-800">📋 내 수업 현장기록</h3>
+        <p className="mt-0.5 text-xs text-neutral-400">완료 체크 · 출석 인원 · 진도 입력 (완료 {doneCount}/{sessions.length})</p>
+      </div>
+      {sessions.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-12 text-center text-sm text-neutral-400">배정된 수업이 없습니다.</p>
+      ) : (
+        <>
+          {section("오늘", todayList, true)}
+          {section("예정", upcoming)}
+          {section("지난 수업", past)}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SessionCard({
+  s, expanded, onToggle, run, pending,
+}: {
+  s: MyClassSession; expanded: boolean; onToggle: () => void;
+  run: (fn: () => Promise<{ ok: boolean; error?: string }>) => void; pending: boolean;
+}) {
+  const [present, setPresent] = useState(s.presentCount != null ? String(s.presentCount) : "");
+  const [note, setNote] = useState(s.progressNote ?? "");
+  const done = s.status === "DONE";
+
+  return (
+    <div className={`rounded-2xl border bg-white ${done ? "border-emerald-200" : "border-neutral-200"}`}>
+      <button onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left">
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg ${done ? "bg-emerald-100" : "bg-neutral-100"}`}>{done ? "✅" : "📋"}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold text-neutral-800">{s.partnerName}{s.title ? ` · ${s.title}` : ""}</span>
+          <span className="block text-xs text-neutral-400">{s.date.slice(5).replace("-", "/")}{s.presentCount != null ? ` · 출석 ${s.presentCount}명` : ""}</span>
+        </span>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${done ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{done ? "완료" : "예정"}</span>
+      </button>
+      {expanded && (
+        <div className="space-y-3 border-t border-neutral-100 p-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">출석 인원</span>
+              <input inputMode="numeric" value={present} onChange={(e) => setPresent(e.target.value.replace(/[^\d]/g, ""))} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm" placeholder="명" />
+            </label>
+          </div>
+          <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">진도 · 특이사항</span>
+            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm" placeholder="오늘 진도, 결석·부상 등 특이사항" />
+          </label>
+          <div className="flex gap-2">
+            <button onClick={() => run(() => saveSession(s.id, { present_count: present, progress_note: note, done: !done }))} disabled={pending}
+              className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${done ? "bg-neutral-500 hover:bg-neutral-600" : "bg-emerald-600 hover:bg-emerald-500"}`}>
+              {done ? "완료 취소" : "✅ 수업 완료"}
+            </button>
+            <button onClick={() => run(() => saveSession(s.id, { present_count: present, progress_note: note }))} disabled={pending}
+              className="rounded-lg border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">기록만 저장</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ===== 내 업무(업무캘린더 연동) =====
 function MyTasksTab({

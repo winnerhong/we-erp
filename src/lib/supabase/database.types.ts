@@ -151,6 +151,9 @@ export interface TransactionRow {
   settlement_id: string | null;
   tax_invoice_id: string | null;
   memo: string | null;
+  present_count: number | null;   // 출석 인원(현장 수집)
+  progress_note: string | null;   // 진도/특이사항
+  completed_at: string | null;    // 현장 완료 체크 시각
   created_at: string;
   updated_at: string;
 }
