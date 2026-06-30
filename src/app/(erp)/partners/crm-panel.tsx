@@ -9,12 +9,26 @@ import {
   SETTLE_UNIT_LABEL, TXN_STATUS_LABEL, TXN_STATUS_TONE, EVIDENCE_TYPE_LABEL,
   SETTLEMENT_STATUS_LABEL, SETTLEMENT_STATUS_TONE, crmChip, autoGrade,
 } from "@/lib/crm";
-import type { ContractRow, TransactionRow, SettlementRow, ContractType } from "@/lib/supabase/database.types";
+import type { ContractRow, TransactionRow, SettlementRow, PartnerAttachmentRow, ContractType } from "@/lib/supabase/database.types";
+import { FileButton } from "@/components/ui";
+import { fmtSize, fileIcon } from "@/lib/library";
 import {
   createContract, updateContract, deleteContract,
   createTransaction, updateTransaction, deleteTransaction, generateMonthlyClassTxns,
   generateMonthlySettlement, updateSettlementStatus, deleteSettlement, createTaxInvoiceFromSettlement,
+  uploadPartnerFile, getPartnerFileUrl, deletePartnerFile,
 } from "./crm-actions";
+
+const ATTACH_CATEGORIES = ["사업자등록증", "통장사본", "계약서", "견적서", "기타"];
+
+function readBase64(file: File): Promise<{ base64: string; mime: string; name: string }> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => { const s = String(r.result); resolve({ base64: s.split(",")[1] ?? "", mime: file.type || "application/octet-stream", name: file.name }); };
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
 
 type Emp = { id: string; name: string };
 const DOW = ["일", "월", "화", "수", "목", "금", "토"];
@@ -521,6 +535,73 @@ export function SettlementsTab({
                 <button onClick={() => remove(s.id)} disabled={pending} className="rounded-lg px-2.5 py-1 text-xs text-rose-400 hover:bg-rose-50">해제</button>
                 {s.period && <span className="ml-auto text-[11px] text-neutral-400">{s.period}</span>}
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 문서함 탭 ============
+export function AttachmentsTab({
+  partnerId, companyId, attachments, onChanged,
+}: {
+  partnerId: string; companyId: string | null; attachments: PartnerAttachmentRow[]; onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [category, setCategory] = useState("사업자등록증");
+
+  function upload(file: File) {
+    startTransition(async () => {
+      const { base64, mime, name } = await readBase64(file);
+      const r = await uploadPartnerFile({ partner_id: partnerId, company_id: companyId, title: name.replace(/\.[^.]+$/, ""), category, file_name: name, base64, mime });
+      if (!r.ok) { alert(r.error ?? "업로드 실패"); return; }
+      onChanged();
+    });
+  }
+  function download(id: string) {
+    startTransition(async () => {
+      const r = await getPartnerFileUrl(id);
+      if (!r.ok || !r.url) { alert(r.error ?? "다운로드 실패"); return; }
+      const a = document.createElement("a"); a.href = r.url; document.body.appendChild(a); a.click(); a.remove();
+    });
+  }
+  function remove(id: string) {
+    if (!confirm("이 문서를 삭제할까요?")) return;
+    startTransition(async () => { const r = await deletePartnerFile(id); if (!r.ok) alert(r.error); else onChanged(); });
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-3">
+        <span className="text-sm font-medium text-neutral-700">문서 첨부</span>
+        <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm">
+          {ATTACH_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <FileButton label="파일 선택" onFile={upload} />
+        {pending && <span className="text-xs text-neutral-400">처리 중…</span>}
+      </div>
+
+      {attachments.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-sm text-neutral-400">첨부된 문서가 없습니다. 사업자등록증·통장사본·계약서 등을 올려두세요.</p>
+      ) : (
+        <div className="space-y-2">
+          {attachments.map((f) => (
+            <div key={f.id} className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3">
+              <span className="text-2xl">{fileIcon(f.file_name, f.mime)}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {f.category && <span className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">{f.category}</span>}
+                  <span className="truncate font-medium text-neutral-800">{f.title}</span>
+                </div>
+                <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-neutral-400">
+                  <span className="truncate">{f.file_name}</span><span>{fmtSize(f.size_bytes)}</span>
+                  {f.uploader_name && <span>{f.uploader_name}</span>}<span>{f.created_at.slice(0, 10)}</span>
+                </div>
+              </div>
+              <button onClick={() => download(f.id)} disabled={pending} className="shrink-0 rounded-lg bg-neutral-100 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-200 disabled:opacity-50">⬇ 받기</button>
+              <button onClick={() => remove(f.id)} disabled={pending} className="shrink-0 rounded-lg px-2 py-1.5 text-sm text-rose-400 hover:bg-rose-50">🗑</button>
             </div>
           ))}
         </div>

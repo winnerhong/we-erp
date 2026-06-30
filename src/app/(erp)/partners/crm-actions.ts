@@ -1,17 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureUser } from "@/lib/auth-guard";
 import { calcTax } from "@/lib/crm";
 import { kstToday } from "@/lib/attendance";
-import type { ContractRow, SettlementRow } from "@/lib/supabase/database.types";
+import type { ContractRow, SettlementRow, PartnerAttachmentRow } from "@/lib/supabase/database.types";
+
+const FILE_BUCKET = "library";
 
 export interface Result {
   ok: boolean;
   error?: string;
   id?: string;
   count?: number;
+  url?: string;
 }
 
 const num = (v: unknown): number | null => {
@@ -309,6 +313,66 @@ export async function deleteSettlement(id: string): Promise<Result> {
   const db = createAdminClient();
   const { error } = await db.from("settlements").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
+  revalidatePath("/partners");
+  return { ok: true };
+}
+
+// ---------------- 거래처 문서함(첨부) ----------------
+
+export interface AttachInput {
+  partner_id: string;
+  company_id: string | null;
+  title: string;
+  category?: string | null;
+  file_name: string;
+  base64: string;
+  mime?: string | null;
+}
+
+export async function uploadPartnerFile(input: AttachInput): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  if (!input.partner_id || !input.file_name || !input.base64) return { ok: false, error: "파일이 없습니다" };
+  const db = createAdminClient();
+  const bytes = Buffer.from(input.base64, "base64");
+  if (bytes.length > 24 * 1024 * 1024) return { ok: false, error: "파일이 너무 큽니다(최대 24MB)." };
+  const ext = input.file_name.includes(".") ? input.file_name.toLowerCase().split(".").pop() : "bin";
+  const path = `partners/${input.partner_id}/${crypto.randomUUID()}.${ext}`;
+  const up = await db.storage.from(FILE_BUCKET).upload(path, bytes, { contentType: input.mime ?? "application/octet-stream", upsert: false });
+  if (up.error) return { ok: false, error: `업로드 실패: ${up.error.message}` };
+
+  const { error } = await db.from("partner_attachments").insert({
+    partner_id: input.partner_id, company_id: input.company_id ?? null,
+    title: input.title.trim() || input.file_name, category: input.category || null,
+    file_name: input.file_name, mime: input.mime ?? null, size_bytes: bytes.length, storage_path: path,
+    uploaded_by: g.profile!.id, uploader_name: g.profile!.username ?? g.profile!.email ?? "관리자",
+  } as never);
+  if (error) { await db.storage.from(FILE_BUCKET).remove([path]); return { ok: false, error: error.message }; }
+  revalidatePath("/partners");
+  return { ok: true };
+}
+
+export async function getPartnerFileUrl(id: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { data } = await db.from("partner_attachments").select("storage_path, file_name").eq("id", id).maybeSingle();
+  const row = data as Pick<PartnerAttachmentRow, "storage_path" | "file_name"> | null;
+  if (!row) return { ok: false, error: "파일을 찾을 수 없습니다" };
+  const { data: signed, error } = await db.storage.from(FILE_BUCKET).createSignedUrl(row.storage_path, 60, { download: row.file_name });
+  if (error || !signed) return { ok: false, error: error?.message ?? "링크 생성 실패" };
+  return { ok: true, url: signed.signedUrl };
+}
+
+export async function deletePartnerFile(id: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { data } = await db.from("partner_attachments").select("storage_path").eq("id", id).maybeSingle();
+  const path = (data as { storage_path: string } | null)?.storage_path;
+  const { error } = await db.from("partner_attachments").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  if (path) await db.storage.from(FILE_BUCKET).remove([path]);
   revalidatePath("/partners");
   return { ok: true };
 }

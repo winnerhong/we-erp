@@ -631,6 +631,22 @@ export interface LibraryFavoriteRow {
   created_at: string;
 }
 
+// ---------------- 거래처 문서함 ----------------
+export interface PartnerAttachmentRow {
+  id: string;
+  partner_id: string;
+  company_id: string | null;
+  title: string;
+  category: string | null;
+  file_name: string;
+  mime: string | null;
+  size_bytes: number;
+  storage_path: string;
+  uploaded_by: string | null;
+  uploader_name: string | null;
+  created_at: string;
+}
+
 // ---------------- CMS 공지 ----------------
 export interface NoticeRow {
   id: string;
@@ -752,6 +768,7 @@ export interface Database {
       assets: TableShape<AssetRow, "name">;
       asset_movements: TableShape<AssetMovementRow, "asset_id" | "type" | "txn_date">;
       event_staff: TableShape<EventStaffRow, "contract_id">;
+      partner_attachments: TableShape<PartnerAttachmentRow, "partner_id" | "title" | "file_name" | "storage_path">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
