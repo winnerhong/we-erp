@@ -631,6 +631,16 @@ export interface LibraryFavoriteRow {
   created_at: string;
 }
 
+// ---------------- 행사 인력 배정 ----------------
+export interface EventStaffRow {
+  id: string;
+  contract_id: string;
+  employee_id: string | null;
+  role: string | null;
+  memo: string | null;
+  created_at: string;
+}
+
 // ---------------- QR 교구·자산 ----------------
 export interface AssetRow {
   id: string;
@@ -720,6 +730,7 @@ export interface Database {
       settlements: TableShape<SettlementRow, "partner_id" | "title">;
       assets: TableShape<AssetRow, "name">;
       asset_movements: TableShape<AssetMovementRow, "asset_id" | "type" | "txn_date">;
+      event_staff: TableShape<EventStaffRow, "contract_id">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
