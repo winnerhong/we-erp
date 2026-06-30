@@ -100,6 +100,22 @@ export default async function DashboardPage() {
   const draftSettleAmount = setRows.filter((s) => s.status === "DRAFT").reduce((s2, s) => s2 + s.total, 0);
   const hasCrm = txnRows.length > 0 || setRows.length > 0;
 
+  // 운영 알림(미반납 교구·만료 임박 계약·임박 행사)
+  const d30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30);
+  const d30s = `${d30.getFullYear()}-${String(d30.getMonth() + 1).padStart(2, "0")}-${String(d30.getDate()).padStart(2, "0")}`;
+  const d7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
+  const d7s = `${d7.getFullYear()}-${String(d7.getMonth() + 1).padStart(2, "0")}-${String(d7.getDate()).padStart(2, "0")}`;
+  let openRentQ = supabase.from("asset_movements").select("id", { count: "exact", head: true }).eq("status", "OPEN");
+  let expireQ = supabase.from("contracts").select("id", { count: "exact", head: true }).eq("status", "ACTIVE").gte("end_date", today).lte("end_date", d30s);
+  let eventQ = supabase.from("contracts").select("detail, status").eq("type", "EVENT").neq("status", "ENDED");
+  if (filter) { openRentQ = openRentQ.eq("company_id", filter); expireQ = expireQ.eq("company_id", filter); eventQ = eventQ.eq("company_id", filter); }
+  const [{ count: openRentals }, { count: expiringContracts }, { data: evData }] = await Promise.all([openRentQ, expireQ, eventQ]);
+  const upcomingEvents = ((evData ?? []) as { detail: Record<string, unknown> }[]).filter((e) => {
+    const ed = e.detail?.event_date;
+    return typeof ed === "string" && ed >= today && ed <= d7s;
+  }).length;
+  const hasOps = (openRentals ?? 0) > 0 || (expiringContracts ?? 0) > 0 || upcomingEvents > 0;
+
   // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용
   let settledQ = supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null);
   if (filter) settledQ = settledQ.eq("company_id", filter);
@@ -302,6 +318,18 @@ export default async function DashboardPage() {
                 <Kpi label="정산 대기(미정산 거래)" value={krw(unsettledAmount)} href="/partners" small tone={unsettledAmount > 0 ? "red" : undefined} />
                 <Kpi label="발행 대기(미발행 정산)" value={krw(draftSettleAmount)} href="/partners" small tone={draftSettleAmount > 0 ? "red" : undefined} />
                 {todaySessions.length > 0 && <Kpi label="오늘 수업(완료/총)" value={`${sessionsDone}/${todaySessions.length}`} href="/sessions" small tone={sessionsDone < todaySessions.length ? "red" : "green"} />}
+              </div>
+            </>
+          )}
+
+          {/* 운영 알림 */}
+          {hasOps && (
+            <>
+              <h2 className="mb-2 mt-7 text-sm font-semibold text-neutral-700">🔔 운영 알림</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <Todo label="미반납 교구" n={openRentals ?? 0} href="/assets" />
+                <Todo label="만료 임박 계약(30일)" n={expiringContracts ?? 0} href="/partners" />
+                <Todo label="임박 행사(7일)" n={upcomingEvents} href="/events" />
               </div>
             </>
           )}
