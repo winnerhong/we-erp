@@ -628,6 +628,39 @@ export interface LibraryFavoriteRow {
   created_at: string;
 }
 
+// ---------------- QR 교구·자산 ----------------
+export interface AssetRow {
+  id: string;
+  company_id: string | null;
+  code: string | null;
+  name: string;
+  category: string | null;
+  total_qty: number;
+  available_qty: number;
+  status: string;             // AVAILABLE/RENTED/REPAIR/LOST
+  location: string | null;
+  purchase_price: number | null;
+  purchase_date: string | null;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetMovementRow {
+  id: string;
+  company_id: string | null;
+  asset_id: string;
+  type: string;               // IN/OUT/RENT/RETURN/REPAIR/DISPOSE
+  qty: number;
+  partner_id: string | null;
+  employee_id: string | null;
+  txn_date: string;
+  due_date: string | null;
+  status: string;             // OPEN/CLOSED
+  memo: string | null;
+  created_at: string;
+}
+
 type TableShape<Row, RequiredInsert extends keyof Row> = {
   Row: Row;
   Insert: Partial<Row> & Pick<Row, RequiredInsert>;
@@ -682,6 +715,8 @@ export interface Database {
       contracts: TableShape<ContractRow, "partner_id" | "name">;
       transactions: TableShape<TransactionRow, "partner_id" | "txn_date">;
       settlements: TableShape<SettlementRow, "partner_id" | "title">;
+      assets: TableShape<AssetRow, "name">;
+      asset_movements: TableShape<AssetMovementRow, "asset_id" | "type" | "txn_date">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

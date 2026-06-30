@@ -13,7 +13,7 @@ import type { ContractRow, TransactionRow, SettlementRow, ContractType } from "@
 import {
   createContract, updateContract, deleteContract,
   createTransaction, updateTransaction, deleteTransaction, generateMonthlyClassTxns,
-  generateMonthlySettlement, updateSettlementStatus, deleteSettlement,
+  generateMonthlySettlement, updateSettlementStatus, deleteSettlement, createTaxInvoiceFromSettlement,
 } from "./crm-actions";
 
 type Emp = { id: string; name: string };
@@ -104,6 +104,14 @@ function ContractCard({ c, empName, onEdit, onChanged }: { c: ContractRow; empNa
   const type = c.type as ContractType;
   const d = c.detail ?? {};
   const dows = Array.isArray(d.dows) ? (d.dows as number[]) : [];
+  // 만료 임박(D-30) — 진행중 + 종료일이 30일 이내
+  let dday: number | null = null;
+  if (c.status === "ACTIVE" && c.end_date) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const end = new Date(`${c.end_date}T00:00:00`);
+    dday = Math.round((end.getTime() - today.getTime()) / 86400000);
+  }
+  const expiring = dday !== null && dday >= 0 && dday <= 30;
 
   function genThisMonth() {
     const now = new Date();
@@ -129,6 +137,7 @@ function ContractCard({ c, empName, onEdit, onChanged }: { c: ContractRow; empNa
             <span className={`rounded border px-1.5 py-0.5 text-[10px] font-medium ${crmChip(CONTRACT_TYPE_TONE[type])}`}>{CONTRACT_TYPE_LABEL[type]}</span>
             <span className="font-semibold text-neutral-800">{c.name}</span>
             <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500">{CONTRACT_STATUS_LABEL[c.status] ?? c.status}</span>
+            {expiring && <span className="rounded bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold text-rose-600">⏰ {dday === 0 ? "오늘 만료" : `D-${dday} 만료임박`}</span>}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-neutral-500">
             {(c.start_date || c.end_date) && <span>{c.start_date ?? "?"} ~ {c.end_date ?? "?"}</span>}
@@ -467,6 +476,10 @@ export function SettlementsTab({
     if (!confirm("이 정산을 해제할까요? (묶인 거래는 미정산으로 복귀)")) return;
     startTransition(async () => { const r = await deleteSettlement(id); if (!r.ok) alert(r.error); else onChanged(); });
   }
+  function makeInvoice(id: string) {
+    if (!confirm("이 정산으로 매출 세금계산서를 생성·연결할까요?")) return;
+    startTransition(async () => { const r = await createTaxInvoiceFromSettlement(id); if (!r.ok) alert(r.error); else { alert("세금계산서 생성·연결됨"); onChanged(); } });
+  }
 
   return (
     <div className="space-y-3">
@@ -497,6 +510,11 @@ export function SettlementsTab({
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <a href={`/print/settlement/${s.id}`} target="_blank" rel="noreferrer" className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50">🖨 거래명세서</a>
+                {s.tax_invoice_id ? (
+                  <span className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">📑 세금계산서 ✓</span>
+                ) : (
+                  <button onClick={() => makeInvoice(s.id)} disabled={pending} className="rounded-lg border border-blue-300 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-100">📑 세금계산서 생성</button>
+                )}
                 <select value={s.status} disabled={pending} onChange={(e) => setStatus(s.id, e.target.value)} className="rounded-lg border border-neutral-300 px-2 py-1 text-xs">
                   {Object.entries(SETTLEMENT_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>

@@ -24,6 +24,7 @@ export const MENUS: MenuItem[] = [
   { href: "/cards", label: "카드원장", icon: "💳" },
   { href: "/paybacks", label: "페이백", icon: "💸" },
   { href: "/purchases", label: "구매 요청", icon: "🛒" },
+  { href: "/assets", label: "교구·자산", icon: "🏐" },
   { href: "/attendance", label: "근태현황", icon: "🕘" },
   { href: "/hr", label: "급여·인사", icon: "💰" },
   { href: "/documents", label: "서류관리", icon: "📄" },

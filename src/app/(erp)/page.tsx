@@ -86,6 +86,18 @@ export default async function DashboardPage() {
   const taskOverdue = openTasks.filter((t) => t.due_date && t.due_date < today).length;
   const taskToday = openTasks.filter((t) => t.due_date === today).length;
 
+  // 거래/정산 요약(거래처 CRM)
+  let txnQ = supabase.from("transactions").select("amount, status, settlement_id, txn_date").neq("status", "CANCELED");
+  let setQ = supabase.from("settlements").select("total, status");
+  if (filter) { txnQ = txnQ.eq("company_id", filter); setQ = setQ.eq("company_id", filter); }
+  const [{ data: txnData }, { data: setData }] = await Promise.all([txnQ, setQ]);
+  const txnRows = (txnData ?? []) as { amount: number; status: string; settlement_id: string | null; txn_date: string }[];
+  const setRows = (setData ?? []) as { total: number; status: string }[];
+  const txnThisMonth = txnRows.filter((t) => inMonth(t.txn_date)).reduce((s, t) => s + t.amount, 0);
+  const unsettledAmount = txnRows.filter((t) => !t.settlement_id).reduce((s, t) => s + t.amount, 0);
+  const draftSettleAmount = setRows.filter((s) => s.status === "DRAFT").reduce((s2, s) => s2 + s.total, 0);
+  const hasCrm = txnRows.length > 0 || setRows.length > 0;
+
   // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용
   let settledQ = supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null);
   if (filter) settledQ = settledQ.eq("company_id", filter);
@@ -275,6 +287,21 @@ export default async function DashboardPage() {
               </div>
             </Card>
           </Link>
+
+          {/* 거래처 거래·정산 */}
+          {hasCrm && (
+            <>
+              <div className="mt-7 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-neutral-700">거래처 거래·정산</h2>
+                <Link href="/partners" className="text-xs text-indigo-600 hover:underline">거래처 →</Link>
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-3">
+                <Kpi label="이번 달 거래액" value={krw(txnThisMonth)} href="/partners" small />
+                <Kpi label="정산 대기(미정산 거래)" value={krw(unsettledAmount)} href="/partners" small tone={unsettledAmount > 0 ? "red" : undefined} />
+                <Kpi label="발행 대기(미발행 정산)" value={krw(draftSettleAmount)} href="/partners" small tone={draftSettleAmount > 0 ? "red" : undefined} />
+              </div>
+            </>
+          )}
 
           {/* 최근 6개월 추세 */}
           <h2 className="mb-2 mt-7 text-sm font-semibold text-neutral-700">최근 6개월 추세</h2>

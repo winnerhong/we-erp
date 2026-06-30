@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureUser } from "@/lib/auth-guard";
 import { calcTax } from "@/lib/crm";
-import type { ContractRow } from "@/lib/supabase/database.types";
+import { kstToday } from "@/lib/attendance";
+import type { ContractRow, SettlementRow } from "@/lib/supabase/database.types";
 
 export interface Result {
   ok: boolean;
@@ -293,4 +294,31 @@ export async function deleteSettlement(id: string): Promise<Result> {
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
   return { ok: true };
+}
+
+/** 정산 → 매출 세금계산서 생성·연결(수기). 팝빌 전 단계. */
+export async function createTaxInvoiceFromSettlement(settlementId: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { data: s } = await db.from("settlements").select("*").eq("id", settlementId).maybeSingle();
+  const st = s as SettlementRow | null;
+  if (!st) return { ok: false, error: "정산을 찾을 수 없습니다" };
+  if (st.tax_invoice_id) return { ok: false, error: "이미 세금계산서가 연결되어 있습니다." };
+  if (!st.company_id) return { ok: false, error: "사업자가 지정되지 않은 거래처는 세금계산서를 만들 수 없습니다(거래처에 사업자 지정 후 재시도)." };
+
+  const { data: inv, error: iErr } = await db.from("tax_invoices").insert({
+    company_id: st.company_id, type: "SALES", status: "DONE", partner_id: st.partner_id,
+    doc_date: kstToday(), supply_amount: st.subtotal, vat_amount: st.tax_amount, total_amount: st.total,
+    evidence: "세금계산서", memo: `정산 자동발행: ${st.title}`,
+  } as never).select("id").single();
+  if (iErr) return { ok: false, error: iErr.message };
+
+  await db.from("settlements").update({
+    tax_invoice_id: (inv as { id: string }).id, status: "ISSUED", issued_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+  } as never).eq("id", settlementId);
+  revalidatePath("/partners");
+  revalidatePath("/tax-invoices");
+  revalidatePath("/");
+  return { ok: true, id: (inv as { id: string }).id };
 }
