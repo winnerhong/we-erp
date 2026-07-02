@@ -2,8 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MENUS, MENU_BY_HREF } from "@/lib/menus";
+
+/** 즉시 뜨는 커스텀 툴팁(네이티브 title 지연 회피). transition 없이 group-hover로 바로 표시. */
+function Tip({ children }: { children: ReactNode }) {
+  return (
+    <span className="pointer-events-none absolute left-1/2 top-full z-[70] mt-1 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-neutral-700 px-1.5 py-0.5 text-[11px] font-medium text-white shadow-md group-hover/qm:block">
+      {children}
+    </span>
+  );
+}
 
 const STORAGE_KEY = "erp_quickmenu";
 const DEFAULTS = ["/", "/partners", "/employees"];
@@ -57,24 +66,27 @@ export function QuickMenu({ allowedHrefs }: { allowedHrefs: string[] }) {
     <div ref={rootRef} className="relative flex items-center gap-0.5">
       <span className="mr-0.5 hidden text-xs text-neutral-300 sm:inline">⭐</span>
       {items.map((m) => (
-        <Link
-          key={m.href}
-          href={m.href}
-          title={m.label}
-          className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition ${
-            isActive(m.href) ? "bg-indigo-500 text-white" : "text-neutral-600 hover:bg-neutral-100"
-          }`}
-        >
-          {m.icon}
-        </Link>
+        <span key={m.href} className="group/qm relative">
+          <Link
+            href={m.href}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition ${
+              isActive(m.href) ? "bg-indigo-500 text-white" : "text-neutral-600 hover:bg-neutral-100"
+            }`}
+          >
+            {m.icon}
+          </Link>
+          <Tip>{m.label}</Tip>
+        </span>
       ))}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        title="퀵메뉴 설정"
-        className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition ${open ? "bg-neutral-100 text-neutral-800" : "text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"}`}
-      >
-        ⚙
-      </button>
+      <span className="group/qm relative">
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm transition ${open ? "bg-neutral-100 text-neutral-800" : "text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"}`}
+        >
+          ⚙
+        </button>
+        <Tip>퀵메뉴 설정</Tip>
+      </span>
 
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1.5 max-h-[70vh] w-56 overflow-y-auto rounded-xl border border-neutral-200 bg-white p-2 shadow-lg">
