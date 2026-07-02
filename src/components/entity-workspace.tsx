@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { HoverPreview, type PreviewData } from "@/components/hover-preview";
 
 /* ────────────────────────────────────────────────────────────
  *  EntityWorkspace — 거래처(파트너) 카드 마스터-디테일 패턴을 일반화한
@@ -19,6 +20,8 @@ export interface EwItem {
   search: string;
   /** 필터 매칭 키 (status/category 등) */
   filterKey?: string;
+  /** 마우스오버 미리보기(사진·주요정보). 있으면 팝오버 표시. */
+  preview?: PreviewData;
 }
 
 export interface EwFilter {
@@ -156,9 +159,8 @@ export function EntityWorkspace({
             ) : (
               filtered.map((it) => {
                 const on = selectedId === it.id;
-                return (
+                const btn = (
                   <button
-                    key={it.id}
                     onClick={() => select(it.id)}
                     className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition ${
                       on ? "bg-indigo-50" : "hover:bg-neutral-50"
@@ -176,6 +178,11 @@ export function EntityWorkspace({
                       {it.sub && <span className="block truncate text-xs text-neutral-400">{it.sub}</span>}
                     </span>
                   </button>
+                );
+                return it.preview ? (
+                  <HoverPreview key={it.id} data={it.preview}>{btn}</HoverPreview>
+                ) : (
+                  <div key={it.id}>{btn}</div>
                 );
               })
             )}

@@ -15,6 +15,7 @@ import type { ImportCtx } from "@/lib/import-specs";
 import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
 import { importPartnersFromWks, bulkAssignCompany } from "./actions";
 import { CrmKpis, ContractsTab, TransactionsTab, SettlementsTab, AttachmentsTab } from "./crm-panel";
+import { HoverPreview, type PreviewData } from "@/components/hover-preview";
 import { PARTNER_KIND_LABEL, TAX_CATEGORY_LABEL, PAYMENT_TERMS_LABEL, PAYMENT_CYCLE_LABEL, EVIDENCE_TYPE_LABEL } from "@/lib/crm";
 import type { SyncKind } from "@/lib/wks-sync";
 
@@ -351,9 +352,23 @@ export function PartnersClient({
               filtered.map((r) => {
                 const on = selected?.id === r.id;
                 const checked = picked.has(r.id);
+                const preview: PreviewData = {
+                  initial: r.name?.[0] ?? "?",
+                  title: r.name,
+                  subtitle: companyName(r.company_id),
+                  badge: r.category ? { label: catLabel[r.category] ?? r.category, tone: catColor[r.category] || "neutral" } : null,
+                  fields: [
+                    { label: "사업자번호", value: r.biz_no || "" },
+                    { label: "대표자", value: r.rep_name || "" },
+                    { label: "담당자", value: r.contact_name || "" },
+                    { label: "연락처", value: r.phone || "" },
+                    { label: "이메일", value: r.email || "" },
+                    { label: "소속", value: companyName(r.company_id) },
+                  ],
+                };
                 return (
+                  <HoverPreview key={r.id} data={preview}>
                   <button
-                    key={r.id}
                     onClick={() => (selectMode ? togglePick(r.id) : go(r.id))}
                     className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition ${
                       selectMode ? (checked ? "bg-indigo-50" : "hover:bg-neutral-50") : on ? "bg-indigo-50" : "hover:bg-neutral-50"
@@ -382,6 +397,7 @@ export function PartnersClient({
                       </span>
                     </span>
                   </button>
+                  </HoverPreview>
                 );
               })
             )}

@@ -88,6 +88,20 @@ export function StudentsClient({ rows, selectedId }: { rows: StudentRow[]; selec
       .filter(Boolean)
       .join(" "),
     filterKey: r.status ?? undefined,
+    preview: {
+      initial: r.name?.[0] ?? "?",
+      title: r.name,
+      subtitle: [r.school, r.grade, r.class_name].filter(Boolean).join(" · "),
+      badge: r.status ? { label: r.status, tone: STATUS_TONE[r.status] } : null,
+      fields: [
+        { label: "학교·학년", value: [r.school, r.grade].filter(Boolean).join(" ") },
+        { label: "반", value: r.class_name || "" },
+        { label: "보호자", value: r.guardian_name || "" },
+        { label: "보호자연락처", value: r.guardian_phone || "" },
+        { label: "학생연락처", value: r.student_phone || "" },
+        { label: "등록일", value: r.enrollment_date || "" },
+      ],
+    },
   }));
 
   const selected = rows.find((r) => r.id === selectedId) ?? null;

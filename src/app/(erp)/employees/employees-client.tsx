@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { InlineSelect } from "@/components/inline-select";
+import { HoverPreview, type PreviewData } from "@/components/hover-preview";
 import { OptionsManager, type OptionCat } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
@@ -397,9 +398,24 @@ export function EmployeesClient({
               filtered.map((r) => {
                 const on = selected?.id === r.id;
                 const acc = accounts[r.id];
+                const preview: PreviewData = {
+                  photoUrl: r.photo_url,
+                  initial: r.name?.[0] ?? "?",
+                  title: r.name,
+                  subtitle: [companyName.get(r.company_id ?? "") ?? "미배정", empLabel[r.employment_type] ?? r.employment_type].filter(Boolean).join(" · "),
+                  badge: r.status ? { label: statusLabel[r.status] ?? r.status, tone: statusColor[r.status] || "neutral" } : null,
+                  fields: [
+                    { label: "연락처", value: r.phone || "" },
+                    { label: "이메일", value: r.email || "" },
+                    { label: "부서", value: r.department ? deptLabel[r.department] ?? r.department : "" },
+                    { label: "직급·직책", value: [r.job_rank ? rankLabel[r.job_rank] ?? r.job_rank : "", r.job_title ? titleLabel[r.job_title] ?? r.job_title : ""].filter(Boolean).join(" · ") },
+                    { label: "아이디", value: acc?.username || "" },
+                    { label: "입사일", value: r.hired_on || "" },
+                  ],
+                };
                 return (
+                  <HoverPreview key={r.id} data={preview}>
                   <button
-                    key={r.id}
                     onClick={() => setSelectedId(r.id)}
                     className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
                       on ? "bg-indigo-50" : "hover:bg-neutral-50"
@@ -422,6 +438,7 @@ export function EmployeesClient({
                       </span>
                     )}
                   </button>
+                  </HoverPreview>
                 );
               })
             )}
