@@ -17,7 +17,6 @@ export const MENUS: MenuItem[] = [
   { href: "/partners", label: "거래처", icon: "🤝" },
   { href: "/students", label: "원생", icon: "🧒" },
   { href: "/employees", label: "직원", icon: "👥" },
-  { href: "/drivers", label: "기사", icon: "🚐" },
   { href: "/org", label: "조직도", icon: "🏢" },
   { href: "/accounts", label: "계정과목", icon: "📒" },
   { href: "/receipts", label: "영수증 OCR", icon: "🧾" },
@@ -47,7 +46,7 @@ export const MENU_GROUPS: MenuGroup[] = [
   { label: "영업·고객", icon: "🤝", hrefs: ["/partners", "/students", "/sales"] },
   { label: "회계", icon: "💰", hrefs: ["/daily", "/report", "/finance", "/purchases"] },
   { label: "증빙·세무", icon: "🧾", hrefs: ["/tax-invoices", "/receipts", "/bank", "/cards", "/paybacks"] },
-  { label: "인사", icon: "👥", hrefs: ["/employees", "/drivers", "/org", "/attendance", "/hr"] },
+  { label: "인사", icon: "👥", hrefs: ["/employees", "/org", "/attendance", "/hr"] },
   { label: "문서", icon: "📄", hrefs: ["/documents", "/library"] },
   { label: "설정", icon: "⚙️", hrefs: ["/companies", "/accounts"] },
 ];
