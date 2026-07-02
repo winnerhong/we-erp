@@ -25,7 +25,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const profile = await getCurrentProfile();
   let empQ = supabase
     .from("employees")
-    .select("id, name, company_id, department, photo_url, is_manager, profile_id")
+    .select("id, name, company_id, department, photo_url, profile_id")
     .eq("is_active", true)
     .order("name");
   if (filter) empQ = empQ.eq("company_id", filter);
@@ -35,7 +35,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     supabase.from("field_options").select("value, label, color").eq("category", "task_category").eq("is_active", true).order("sort_order"),
     supabase.from("field_options").select("value, label").eq("category", "department"),
   ]);
-  const empRows = (empData ?? []) as (Pick<EmployeeRow, "id" | "name" | "company_id" | "department" | "photo_url" | "is_manager"> & { profile_id: string | null })[];
+  const empRows = (empData ?? []) as (Pick<EmployeeRow, "id" | "name" | "company_id" | "department" | "photo_url"> & { profile_id: string | null })[];
   const deptLabel = new Map(((deptOpts ?? []) as { value: string; label: string }[]).map((o) => [o.value, o.label]));
   const employees: CalEmployee[] = empRows.map((e) => ({
     id: e.id,
@@ -43,18 +43,17 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     department: e.department ? deptLabel.get(e.department) ?? e.department : null,
     photoUrl: e.photo_url ?? null,
     companyId: e.company_id ?? null,
-    isManager: e.is_manager,
   }));
   const categories: CalCategory[] = ((catOpts ?? []) as CalCategory[]);
 
-  // 내 권한
+  // 내 권한(관리자만 타인 배정)
   const me = empRows.find((e) => e.profile_id && profile && e.profile_id === profile.id) ?? null;
   const isAdmin = profile?.role === "ADMIN";
   const meCtx = {
     profileId: profile?.id ?? null,
     employeeId: me?.id ?? null,
     isAdmin,
-    canAssign: isAdmin || me?.is_manager === true,
+    canAssign: isAdmin,
   };
 
   // 업무 — 창(window)에 걸치거나 + 미완료(백로그) 전부

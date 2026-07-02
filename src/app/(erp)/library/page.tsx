@@ -18,17 +18,13 @@ export default async function LibraryPage() {
     supabase.from("field_options").select("value, label").eq("category", "department"),
   ]);
 
-  // 즐겨찾기 + 매니저 여부
+  // 즐겨찾기 + 관리 권한(관리자 전용)
   const db = createAdminClient();
   let favorites: string[] = [];
-  let canManage = profile?.role === "ADMIN";
+  const canManage = profile?.role === "ADMIN";
   if (profile) {
-    const [{ data: favs }, { data: emp }] = await Promise.all([
-      db.from("library_favorites").select("file_id").eq("profile_id", profile.id),
-      db.from("employees").select("is_manager").eq("profile_id", profile.id).maybeSingle(),
-    ]);
+    const { data: favs } = await db.from("library_favorites").select("file_id").eq("profile_id", profile.id);
     favorites = ((favs ?? []) as LibraryFavoriteRow[]).map((f) => f.file_id);
-    if ((emp as { is_manager: boolean } | null)?.is_manager) canManage = true;
   }
 
   const companies = ctx.companies.map((c) => ({ id: c.id, name: c.name }));

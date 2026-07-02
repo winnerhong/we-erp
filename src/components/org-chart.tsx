@@ -12,7 +12,6 @@ export interface OrgEmployee {
   rankLabel: string | null;
   rankSort: number;
   titleLabel: string | null;
-  isManager: boolean;
   phone: string | null;
   email: string | null;
   hiredOn: string | null;
@@ -77,9 +76,8 @@ export function OrgChart({
             </div>
             <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">
               {depts.map(([dk, members]) => {
-                // 매니저 먼저 → 직급순 → 이름순
+                // 직급순 → 이름순
                 const sorted = members.slice().sort((a, b) => {
-                  if (a.isManager !== b.isManager) return a.isManager ? -1 : 1;
                   if (a.rankSort !== b.rankSort) return a.rankSort - b.rankSort;
                   return a.name.localeCompare(b.name);
                 });
@@ -104,7 +102,6 @@ export function OrgChart({
                             <OrgAvatar emp={e} />
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1">
-                                {e.isManager && <span title="부서장">👑</span>}
                                 <span className="truncate text-sm font-semibold text-neutral-800">{e.name}</span>
                               </div>
                               <div className="truncate text-[11px] text-neutral-500">
@@ -130,7 +127,6 @@ export function OrgChart({
               <OrgAvatar emp={picked} big />
             </div>
             <div className="flex items-center justify-center gap-1">
-              {picked.isManager && <span title="부서장">👑</span>}
               <h4 className="text-lg font-bold text-neutral-900">{picked.name}</h4>
             </div>
             <p className="mt-0.5 text-sm text-neutral-500">{[picked.titleLabel, picked.rankLabel].filter(Boolean).join(" · ") || "—"}</p>

@@ -40,18 +40,6 @@ export interface AccountResult {
 // 직원 전환 로그인(임퍼소네이트)은 새 탭에서 열기 위해 GET 라우트로 이동:
 //   src/app/(erp)/employees/impersonate/[id]/route.ts
 
-/** 직원 매니저(부서장) 지정/해제 — 업무 배정 권한. */
-export async function setEmployeeManager(employeeId: string, isManager: boolean): Promise<AccountResult> {
-  const g = await ensureAdmin();
-  if (g.error) return { ok: false, error: g.error };
-  const db = createAdminClient();
-  const { error } = await db.from("employees").update({ is_manager: isManager } as never).eq("id", employeeId);
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/employees");
-  revalidatePath("/calendar");
-  return { ok: true };
-}
-
 /** 직원에게 로그인 계정 발급(아이디·비번). 가상 이메일로 합성. */
 export async function issueEmployeeAccount(
   employeeId: string,

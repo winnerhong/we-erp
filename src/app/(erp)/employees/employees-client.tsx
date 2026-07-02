@@ -57,7 +57,6 @@ import {
   resetEmployeePassword,
   setEmployeeAccountRole,
   revokeEmployeeAccount,
-  setEmployeeManager,
 } from "./actions";
 
 export interface AccountInfo {
@@ -443,9 +442,6 @@ export function EmployeesClient({
                 <div className="min-w-0 flex-[1.618]">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-3xl font-bold tracking-tight">{selected.name}</h2>
-                    {selected.is_manager && (
-                      <span className="rounded-full bg-amber-300/90 px-2.5 py-0.5 text-xs font-bold text-amber-900">👑 매니저</span>
-                    )}
                     {selected.nickname && (
                       <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">{selected.nickname}</span>
                     )}
@@ -483,17 +479,6 @@ export function EmployeesClient({
               <div className="mt-6 flex flex-wrap gap-2">
                 <HeaderBtn onClick={() => setEditFor(selected)}>✏️ 수정</HeaderBtn>
                 <HeaderBtn onClick={() => setAcctFor(selected)}>🔑 계정·비번</HeaderBtn>
-                <HeaderBtn
-                  onClick={() => {
-                    const next = !selected.is_manager;
-                    void setEmployeeManager(selected.id, next).then((r) => {
-                      if (r?.error) alert(r.error);
-                      else refresh();
-                    });
-                  }}
-                >
-                  {selected.is_manager ? "✅ 매니저" : "☆ 매니저 지정"}
-                </HeaderBtn>
                 {accounts[selected.id] && (
                   <HeaderBtn
                     onClick={() => {

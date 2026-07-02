@@ -22,7 +22,6 @@ export interface CalEmployee {
   department: string | null;
   photoUrl: string | null;
   companyId: string | null;
-  isManager: boolean;
 }
 export interface CalCategory { value: string; label: string; color: string | null }
 export interface CalTask {

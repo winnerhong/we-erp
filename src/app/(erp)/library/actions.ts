@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser, ensureManager } from "@/lib/auth-guard";
+import { ensureUser, ensureAdmin } from "@/lib/auth-guard";
 import { fileVisibleTo, VISIBILITIES } from "@/lib/library";
 import type { LibraryFileRow, LibraryVisibility } from "@/lib/supabase/database.types";
 
@@ -23,7 +23,7 @@ function cleanVis(v: string | undefined): LibraryVisibility {
 // ---------------- 폴더 ----------------
 
 export async function createFolder(name: string, parentId: string | null): Promise<Result> {
-  const g = await ensureManager();
+  const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const nm = name.trim();
   if (!nm) return { ok: false, error: "폴더명을 입력하세요" };
@@ -37,7 +37,7 @@ export async function createFolder(name: string, parentId: string | null): Promi
 }
 
 export async function renameFolder(id: string, name: string): Promise<Result> {
-  const g = await ensureManager();
+  const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const nm = name.trim();
   if (!nm) return { ok: false, error: "폴더명을 입력하세요" };
@@ -49,7 +49,7 @@ export async function renameFolder(id: string, name: string): Promise<Result> {
 }
 
 export async function deleteFolder(id: string): Promise<Result> {
-  const g = await ensureManager();
+  const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   // 폴더 내 파일이 있으면 막기(실수 방지)
@@ -76,7 +76,7 @@ export interface UploadInput {
 }
 
 export async function uploadFile(input: UploadInput): Promise<Result> {
-  const g = await ensureManager();
+  const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const title = input.title.trim() || input.fileName;
   if (!input.fileName || !input.base64) return { ok: false, error: "파일이 없습니다" };
@@ -106,7 +106,7 @@ export async function uploadFile(input: UploadInput): Promise<Result> {
     company_id: vis === "ALL" ? null : input.companyId ?? null,
     department: vis === "DEPT" ? input.department ?? null : null,
     uploaded_by: g.profile!.id,
-    uploader_name: g.employee?.name ?? g.profile!.username ?? g.profile!.email ?? "관리자",
+    uploader_name: g.profile!.username ?? g.profile!.email ?? "관리자",
   } as never).select("id").single();
   if (error) {
     await db.storage.from(BUCKET).remove([path]);
@@ -127,7 +127,7 @@ export interface FileMetaInput {
 }
 
 export async function updateFileMeta(id: string, input: FileMetaInput): Promise<Result> {
-  const g = await ensureManager();
+  const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const title = input.title.trim();
   if (!title) return { ok: false, error: "제목을 입력하세요" };
@@ -150,7 +150,7 @@ export async function updateFileMeta(id: string, input: FileMetaInput): Promise<
 
 /** 새 버전 업로드(파일 교체) — 이전 객체는 삭제, version++. */
 export async function replaceFileVersion(id: string, fileName: string, base64: string, mime: string | null): Promise<Result> {
-  const g = await ensureManager();
+  const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   if (!fileName || !base64) return { ok: false, error: "파일이 없습니다" };
   const db = createAdminClient();
@@ -177,7 +177,7 @@ export async function replaceFileVersion(id: string, fileName: string, base64: s
 }
 
 export async function deleteFile(id: string): Promise<Result> {
-  const g = await ensureManager();
+  const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { data: row } = await db.from("library_files").select("storage_path").eq("id", id).maybeSingle();
@@ -201,9 +201,9 @@ export async function getDownloadUrl(id: string): Promise<Result> {
 
   const isAdmin = g.profile!.role === "ADMIN";
   if (!isAdmin) {
-    const { data: emp } = await db.from("employees").select("company_id, department, is_manager").eq("profile_id", g.profile!.id).maybeSingle();
-    const e = emp as { company_id: string | null; department: string | null; is_manager: boolean } | null;
-    const canSee = (e?.is_manager === true) || (e && fileVisibleTo(file, e));
+    const { data: emp } = await db.from("employees").select("company_id, department").eq("profile_id", g.profile!.id).maybeSingle();
+    const e = emp as { company_id: string | null; department: string | null } | null;
+    const canSee = e && fileVisibleTo(file, e);
     if (!canSee) return { ok: false, error: "이 파일에 접근할 권한이 없습니다." };
   }
 

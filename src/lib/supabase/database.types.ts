@@ -179,7 +179,6 @@ export interface EmployeeRow extends Timestamps {
   department: string | null; // field_options(category=department) 부서
   job_rank: string | null;   // field_options(category=job_rank) 직급
   job_title: string | null;  // field_options(category=job_title) 직책
-  is_manager: boolean;       // 매니저(부서장) — 업무 배정 권한
   photo_url: string | null;
   bank_name: string | null;
   account_number: string | null;

@@ -18,7 +18,7 @@ interface Ctx {
   db: ReturnType<typeof createAdminClient>;
   employeeId: string | null;
   isAdmin: boolean;
-  canAssign: boolean; // ADMIN 또는 매니저 → 타인 배정 가능
+  canAssign: boolean; // ADMIN → 타인 배정 가능
 }
 
 /** 현재 사용자 업무 컨텍스트(프로필·본인 직원·권한). */
@@ -28,10 +28,10 @@ async function taskCtx(): Promise<{ ctx?: Ctx; error?: string }> {
   const db = createAdminClient();
   const { data: emp } = await db
     .from("employees")
-    .select("id, is_manager, name")
+    .select("id, name")
     .eq("profile_id", g.profile!.id)
     .maybeSingle();
-  const e = emp as { id: string; is_manager: boolean; name: string } | null;
+  const e = emp as { id: string; name: string } | null;
   const isAdmin = g.profile!.role === "ADMIN";
   return {
     ctx: {
@@ -40,7 +40,7 @@ async function taskCtx(): Promise<{ ctx?: Ctx; error?: string }> {
       db,
       employeeId: e?.id ?? null,
       isAdmin,
-      canAssign: isAdmin || e?.is_manager === true,
+      canAssign: isAdmin,
     },
   };
 }

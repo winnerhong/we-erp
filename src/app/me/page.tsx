@@ -79,7 +79,7 @@ export default async function MePage() {
     db.from("task_assignees").select("task_id").eq("employee_id", emp.id),
     db.from("field_options").select("value, label, color").eq("category", "task_category").eq("is_active", true).order("sort_order"),
     emp.company_id
-      ? db.from("employees").select("id, name, company_id, department, job_rank, job_title, is_manager, photo_url, phone, email, hired_on").eq("is_active", true).eq("company_id", emp.company_id).order("name")
+      ? db.from("employees").select("id, name, company_id, department, job_rank, job_title, photo_url, phone, email, hired_on").eq("is_active", true).eq("company_id", emp.company_id).order("name")
       : Promise.resolve({ data: [] }),
     db.from("library_folders").select("*").order("sort_order"),
     db.from("library_files").select("*").eq("is_active", true).order("created_at", { ascending: false }),
@@ -168,7 +168,7 @@ export default async function MePage() {
       id: e.id, name: e.name, photoUrl: e.photo_url ?? null, companyId: e.company_id ?? null,
       deptValue: e.department ?? null, deptLabel: lbl("department", e.department ?? null),
       rankLabel: lbl("job_rank", e.job_rank ?? null), rankSort: rankSort(e.job_rank ?? null),
-      titleLabel: lbl("job_title", e.job_title ?? null), isManager: e.is_manager,
+      titleLabel: lbl("job_title", e.job_title ?? null),
       phone: e.phone ?? null, email: e.email ?? null, hiredOn: e.hired_on ?? null,
     }));
   }
@@ -177,7 +177,7 @@ export default async function MePage() {
   const empScope = { company_id: emp.company_id, department: emp.department };
   const orgCoName = (company as { name: string } | null)?.name ?? null;
   const libFiles: LibFile[] = ((libFilesRaw ?? []) as LibraryFileRow[])
-    .filter((f) => emp.is_manager || fileVisibleTo(f, empScope))
+    .filter((f) => fileVisibleTo(f, empScope))
     .map((f) => ({
       id: f.id, folderId: f.folder_id, title: f.title, description: f.description,
       fileName: f.file_name, mime: f.mime, size: f.size_bytes, version: f.version,
