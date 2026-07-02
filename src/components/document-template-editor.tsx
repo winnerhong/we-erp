@@ -233,7 +233,7 @@ export function DocumentTemplateEditor({
           <span className="text-sm font-semibold text-neutral-700">문서 편집 (워드처럼 편집)</span>
           <div className="flex items-center gap-1.5">
             <button onClick={resetBody} className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-50">↻ 기본 양식으로 초기화</button>
-            <button onClick={save} className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700">저장하기</button>
+            <button onClick={save} className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500">저장하기</button>
             {template && <button onClick={remove} className="rounded-lg border border-rose-300 px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50">삭제</button>}
           </div>
         </div>
@@ -332,7 +332,7 @@ function TBtn({ on, active, children, title }: { on: () => void; active?: boolea
     <button
       onClick={on}
       title={title}
-      className={`min-w-[28px] rounded px-1.5 py-1 text-sm ${active ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
+      className={`min-w-[28px] rounded px-1.5 py-1 text-sm ${active ? "bg-indigo-500 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
     >
       {children}
     </button>
@@ -352,7 +352,7 @@ function Menu({
     <div className="relative">
       <button
         onClick={() => setMenu(open ? null : id)}
-        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${open ? "bg-indigo-600 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
+        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${open ? "bg-indigo-500 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
       >
         <span className={`grid h-5 w-5 place-items-center rounded text-[11px] font-bold ${open ? "bg-white/20 text-white" : "bg-neutral-200 text-neutral-700"}`}>{icon}</span>
         {label}

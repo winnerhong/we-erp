@@ -107,7 +107,7 @@ export function AssetDetailClient({
           <label className="col-span-2 block sm:col-span-3"><span className="mb-1 block text-xs font-medium text-neutral-500">메모</span><input className={inputCls} value={memo} onChange={(e) => setMemo(e.target.value)} /></label>
         </div>
         <div className="mt-3 flex justify-end">
-          <button onClick={submit} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{pending ? "기록 중…" : `${MOVE_TYPE_LABEL[type]} 기록`}</button>
+          <button onClick={submit} disabled={pending} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">{pending ? "기록 중…" : `${MOVE_TYPE_LABEL[type]} 기록`}</button>
         </div>
       </div>
 

@@ -103,7 +103,7 @@ function WksSyncControls() {
       <button className={btn} disabled={pending} onClick={() => startTransition(() => sync(["기관"]))}>기관</button>
       <button className={btn} disabled={pending} onClick={() => startTransition(() => sync(["장소"]))}>장소</button>
       <button
-        className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+        className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
         disabled={pending}
         onClick={() => startTransition(() => sync())}
       >
@@ -241,7 +241,7 @@ export function PartnersClient({
             <button
               onClick={() => setView("card")}
               className={`rounded-md px-2.5 py-1 font-medium ${
-                view === "card" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"
+                view === "card" ? "bg-indigo-500 text-white" : "text-neutral-500 hover:text-neutral-800"
               }`}
             >
               🗂 카드형
@@ -249,7 +249,7 @@ export function PartnersClient({
             <button
               onClick={() => setView("grid")}
               className={`rounded-md px-2.5 py-1 font-medium ${
-                view === "grid" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"
+                view === "grid" ? "bg-indigo-500 text-white" : "text-neutral-500 hover:text-neutral-800"
               }`}
             >
               ▦ 엑셀형
@@ -282,7 +282,7 @@ export function PartnersClient({
           )}
           <button
             onClick={() => setAddOpen(true)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
           >
             ＋ 거래처 등록
           </button>
@@ -320,7 +320,7 @@ export function PartnersClient({
                   key={t.value}
                   onClick={() => setCatFilter(t.value)}
                   className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                    catFilter === t.value ? "bg-indigo-600 text-white" : "border border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+                    catFilter === t.value ? "bg-indigo-500 text-white" : "border border-neutral-200 text-neutral-600 hover:bg-neutral-50"
                   }`}
                 >
                   {t.label}
@@ -416,7 +416,7 @@ export function PartnersClient({
                 <button
                   onClick={runAssign}
                   disabled={assigning || picked.size === 0}
-                  className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
+                  className="shrink-0 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-40"
                 >
                   {assigning ? "배정 중…" : `${picked.size}개 배정`}
                 </button>
@@ -1080,7 +1080,7 @@ function PartnerEditModal({
       {error && <p className="bg-neutral-50 px-5 pb-1 text-sm text-rose-600">{error}</p>}
       <div className="sticky bottom-0 flex justify-end gap-2 border-t border-neutral-200 bg-white px-5 py-3">
         <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">취소</button>
-        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">
           {pending ? "저장 중…" : "저장"}
         </button>
       </div>

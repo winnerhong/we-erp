@@ -141,7 +141,7 @@ export function MeClient({
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium transition ${
-              tab === t.key ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"
+              tab === t.key ? "bg-indigo-500 text-white" : "text-neutral-600 hover:bg-neutral-100"
             }`}
           >
             <span>{t.icon}</span>
@@ -365,7 +365,7 @@ function MyTasksTab({
             {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
           <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm" />
-          <button disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">추가</button>
+          <button disabled={pending} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">추가</button>
         </form>
       </section>
 
@@ -376,7 +376,7 @@ function MyTasksTab({
         <span className="rounded-lg bg-emerald-50 px-3 py-1 font-medium text-emerald-600">완료 {done.length}</span>
         <div className="ml-auto flex rounded-lg border border-neutral-200 bg-white p-1">
           {([["list", "📋 목록"], ["cal", "📅 캘린더"]] as const).map(([k, lbl]) => (
-            <button key={k} onClick={() => setView(k)} className={`rounded-md px-3 py-1 font-medium ${view === k ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>{lbl}</button>
+            <button key={k} onClick={() => setView(k)} className={`rounded-md px-3 py-1 font-medium ${view === k ? "bg-indigo-500 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>{lbl}</button>
           ))}
         </div>
       </div>
@@ -476,7 +476,7 @@ function MyMonthCalendar({
           const wd = i % 7;
           return (
             <div key={i} className="min-h-[88px] border-b border-r border-neutral-50 p-1.5">
-              <div className={`mb-1 text-right text-xs font-semibold tabular-nums ${isToday ? "inline-block rounded-full bg-indigo-600 px-1.5 text-white" : wd === 0 ? "text-rose-400" : wd === 6 ? "text-blue-400" : "text-neutral-500"}`}>
+              <div className={`mb-1 text-right text-xs font-semibold tabular-nums ${isToday ? "inline-block rounded-full bg-indigo-500 px-1.5 text-white" : wd === 0 ? "text-rose-400" : wd === 6 ? "text-blue-400" : "text-neutral-500"}`}>
                 {Number(d.slice(8))}
               </div>
               <div className="space-y-1">
@@ -573,7 +573,7 @@ function MyTaskCard({
             </div>
             <form className="mt-1.5 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (cmt.trim()) { run(() => addTaskComment(t.id, cmt)); setCmt(""); } }}>
               <input value={cmt} onChange={(e) => setCmt(e.target.value)} placeholder="댓글 입력…" className="flex-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-sm" />
-              <button disabled={pending} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">등록</button>
+              <button disabled={pending} className="rounded-lg bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">등록</button>
             </form>
           </div>
         </div>
@@ -816,7 +816,7 @@ function ClockWidget({ emp, today, todayAtt, todayLeave }: { emp: EmployeeRow; t
           {ci ? "출근 완료" : "출근하기"}
         </button>
         <button onClick={() => act(clockOut)} disabled={pending || !ci || !!co}
-          className="rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 disabled:bg-neutral-200 disabled:text-neutral-400">
+          className="rounded-xl bg-indigo-500 px-3 py-2.5 text-sm font-bold text-white hover:bg-indigo-400 disabled:bg-neutral-200 disabled:text-neutral-400">
           {co ? "퇴근 완료" : "퇴근하기"}
         </button>
       </div>
@@ -869,8 +869,8 @@ function AttendanceContent({ today, rows, leaveDates }: { today: string; rows: A
         title="내 근태현황"
         action={
           <div className="inline-flex rounded-lg border border-neutral-300 bg-white p-0.5 text-xs">
-            <button onClick={() => setView("week")} className={`rounded-md px-2.5 py-1 font-medium ${view === "week" ? "bg-indigo-600 text-white" : "text-neutral-500"}`}>주간</button>
-            <button onClick={() => setView("month")} className={`rounded-md px-2.5 py-1 font-medium ${view === "month" ? "bg-indigo-600 text-white" : "text-neutral-500"}`}>월간</button>
+            <button onClick={() => setView("week")} className={`rounded-md px-2.5 py-1 font-medium ${view === "week" ? "bg-indigo-500 text-white" : "text-neutral-500"}`}>주간</button>
+            <button onClick={() => setView("month")} className={`rounded-md px-2.5 py-1 font-medium ${view === "month" ? "bg-indigo-500 text-white" : "text-neutral-500"}`}>월간</button>
           </div>
         }
       >
@@ -1042,7 +1042,7 @@ function LeaveTab({ emp, leaves }: { emp: EmployeeRow; leaves: LeaveRequestRow[]
           onClick={() => setAdding((v) => !v)}
           disabled={!emp.company_id}
           title={emp.company_id ? "" : "소속 사업자가 없어 신청할 수 없습니다"}
-          className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
+          className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-400 disabled:opacity-40"
         >
           + 휴가 신청
         </button>
@@ -1064,7 +1064,7 @@ function LeaveTab({ emp, leaves }: { emp: EmployeeRow; leaves: LeaveRequestRow[]
           <button
             onClick={submit}
             disabled={pending || !d.start_date || !d.end_date}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50"
           >
             신청
           </button>
@@ -1182,7 +1182,7 @@ function DocsTab({
       <Section
         title="📄 재직증명서"
         action={
-          <button onClick={() => setIssuing((v) => !v)} className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500">
+          <button onClick={() => setIssuing((v) => !v)} className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-400">
             + 발급
           </button>
         }
@@ -1196,7 +1196,7 @@ function DocsTab({
               <TextInput value={form.submit_to} onChange={(e) => setForm({ ...form, submit_to: e.target.value })} placeholder="제출처(선택)" />
             </div>
             {error && <p className="text-sm text-rose-600">{error}</p>}
-            <button onClick={issue} disabled={pending} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+            <button onClick={issue} disabled={pending} className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50">
               발급
             </button>
           </div>

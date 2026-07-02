@@ -186,7 +186,7 @@ export function SalesClient({ date, isAll, companyId, companyName, options, rows
           </div>
 
           {/* 매출 결제수단별 분해 */}
-          <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 bg-indigo-600 p-4 text-sm text-white">
+          <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 bg-indigo-500 p-4 text-sm text-white">
             <span className="text-neutral-300">💳 매출 결제수단</span>
             {PAYMENT_METHODS.map((m) => (
               <span key={m.value}>

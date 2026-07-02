@@ -22,7 +22,7 @@ export function SidebarNav({ allowedHrefs }: { allowedHrefs: string[] }) {
             href={item.href}
             className={`flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors ${
               active
-                ? "bg-indigo-600 font-semibold text-white"
+                ? "bg-indigo-500 font-semibold text-white"
                 : "text-neutral-700 hover:bg-neutral-100"
             }`}
           >

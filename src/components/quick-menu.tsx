@@ -62,7 +62,7 @@ export function QuickMenu({ allowedHrefs }: { allowedHrefs: string[] }) {
           href={m.href}
           title={m.label}
           className={`flex h-8 w-8 items-center justify-center rounded-lg text-base transition ${
-            isActive(m.href) ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"
+            isActive(m.href) ? "bg-indigo-500 text-white" : "text-neutral-600 hover:bg-neutral-100"
           }`}
         >
           {m.icon}

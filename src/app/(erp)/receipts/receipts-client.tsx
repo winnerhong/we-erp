@@ -100,7 +100,7 @@ export function ReceiptsClient({
           <button
             onClick={() => fileRef.current?.click()}
             disabled={!activeCompanyId || !!busy}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
           >
             {busy ?? "📷 영수증 업로드"}
           </button>

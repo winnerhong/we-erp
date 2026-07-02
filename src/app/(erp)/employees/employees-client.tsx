@@ -137,7 +137,7 @@ function TeacherSyncControls() {
         onClick={() => startTransition(() => sync())}
         disabled={pending}
         title="winner-kids 강사 정보를 동기화하고, 아이디·비번(로그인 계정)까지 함께 가져옵니다"
-        className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+        className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
       >
         {pending ? "가져오는 중…" : "👩‍🏫 강사·계정 가져오기"}
       </button>
@@ -279,7 +279,7 @@ export function EmployeesClient({
             <button
               onClick={() => setView("card")}
               className={`rounded-md px-2.5 py-1 font-medium ${
-                view === "card" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"
+                view === "card" ? "bg-indigo-500 text-white" : "text-neutral-500 hover:text-neutral-800"
               }`}
             >
               🗂 카드형
@@ -287,7 +287,7 @@ export function EmployeesClient({
             <button
               onClick={() => setView("grid")}
               className={`rounded-md px-2.5 py-1 font-medium ${
-                view === "grid" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"
+                view === "grid" ? "bg-indigo-500 text-white" : "text-neutral-500 hover:text-neutral-800"
               }`}
             >
               ▦ 엑셀형
@@ -310,7 +310,7 @@ export function EmployeesClient({
           <TeacherSyncControls />
           <button
             onClick={() => setAddOpen(true)}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
           >
             ＋ 직원 등록
           </button>
@@ -361,7 +361,7 @@ export function EmployeesClient({
                   key={k}
                   onClick={() => setSeg(k)}
                   className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
-                    seg === k ? "bg-indigo-600 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                    seg === k ? "bg-indigo-500 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
                   }`}
                 >
                   {label} <span className={seg === k ? "text-neutral-300" : "text-neutral-400"}>{n}</span>
@@ -372,7 +372,7 @@ export function EmployeesClient({
             <div className="mt-1.5 flex flex-wrap gap-1">
               <button
                 onClick={() => setEmpFilter("")}
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${empFilter === "" ? "bg-indigo-600 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${empFilter === "" ? "bg-indigo-500 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}
               >
                 전체 {segRows.length}
               </button>
@@ -382,7 +382,7 @@ export function EmployeesClient({
                   <button
                     key={o.value}
                     onClick={() => setEmpFilter(empFilter === o.value ? "" : o.value)}
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${empFilter === o.value ? "bg-indigo-600 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${empFilter === o.value ? "bg-indigo-500 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}
                   >
                     {o.label} {n}
                   </button>
@@ -1706,7 +1706,7 @@ function LeaveTab({
           <button
             onClick={add}
             disabled={pending || !d.start_date || !d.end_date}
-            className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50"
           >
             등록
           </button>
@@ -1935,7 +1935,7 @@ function DocsTab({
                 <TextInput value={form.purpose} onChange={(e) => setForm({ ...form, purpose: e.target.value })} placeholder="용도" />
                 <TextInput value={form.submit_to} onChange={(e) => setForm({ ...form, submit_to: e.target.value })} placeholder="제출처" />
               </div>
-              <button onClick={issue} disabled={pending} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+              <button onClick={issue} disabled={pending} className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50">
                 발급
               </button>
             </div>
@@ -2001,7 +2001,7 @@ function DocsTab({
                 }}
               />
               <div className="text-right">
-                <button onClick={addDoc} disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+                <button onClick={addDoc} disabled={pending} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50">
                   저장
                 </button>
               </div>
@@ -2104,7 +2104,7 @@ function HistoryTab({ emp, events, memos, onChanged }: { emp: EmployeeRow; event
             </SelectInput>
             <TextInput value={e.title} onChange={(ev) => setE({ ...e, title: ev.target.value })} placeholder="제목" />
             <TextInput value={e.detail} onChange={(ev) => setE({ ...e, detail: ev.target.value })} placeholder="상세" />
-            <button onClick={addEvent} disabled={pending} className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">
+            <button onClick={addEvent} disabled={pending} className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50">
               등록
             </button>
           </div>
@@ -2154,7 +2154,7 @@ function HistoryTab({ emp, events, memos, onChanged }: { emp: EmployeeRow; event
               <button
                 onClick={saveMemo}
                 disabled={pending || !memo.trim()}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-40"
+                className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-40"
               >
                 기록 추가
               </button>
@@ -2477,7 +2477,7 @@ function EditModal({
       {error && <p className="bg-neutral-50 px-5 pb-1 text-sm text-rose-600">{error}</p>}
       <div className="sticky bottom-0 flex justify-end gap-2 border-t border-neutral-200 bg-white px-5 py-3">
         <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">취소</button>
-        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">
           {pending ? "저장 중…" : "저장"}
         </button>
       </div>
@@ -2572,7 +2572,7 @@ function AccountPanel({
           <button
             onClick={issue}
             disabled={pending || !username.trim() || password.length < 4}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
           >
             {pending ? "발급 중…" : "계정 발급"}
           </button>
@@ -2602,7 +2602,7 @@ function AccountPanel({
             <button
               onClick={resetPw}
               disabled={pending || newPw.length < 4}
-              className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+              className="shrink-0 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-50"
             >
               변경
             </button>

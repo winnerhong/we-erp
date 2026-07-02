@@ -631,7 +631,7 @@ export function BankClient({
                   onClick={() => setRowFilter(key)}
                   className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
                     rowFilter === key
-                      ? "bg-indigo-600 text-white"
+                      ? "bg-indigo-500 text-white"
                       : "border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
                   }`}
                 >
@@ -664,7 +664,7 @@ export function BankClient({
               </button>
               <button
                 onClick={() => setTxnModal("new")}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
               >
                 ＋ 거래 추가
               </button>
@@ -962,7 +962,7 @@ function PaybackModal({
                           act(() => payPayback(p.id));
                       }}
                       disabled={pending}
-                      className="rounded-md bg-indigo-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-indigo-500"
+                      className="rounded-md bg-indigo-500 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-indigo-400"
                     >
                       지불완료
                     </button>
@@ -995,7 +995,7 @@ function PaybackModal({
                     setRecipientId("");
                   }}
                   className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                    recipientType === rt ? "bg-indigo-600 text-white" : "border border-neutral-300 hover:bg-neutral-50"
+                    recipientType === rt ? "bg-indigo-500 text-white" : "border border-neutral-300 hover:bg-neutral-50"
                   }`}
                 >
                   {rt === "EMPLOYEE" ? "💼 강사·직원" : "🏢 거래처"}
@@ -1035,7 +1035,7 @@ function PaybackModal({
                       key={r}
                       onClick={() => setRate(r)}
                       className={`rounded-md px-2 py-1 text-xs ${
-                        rate === r ? "bg-indigo-600 text-white" : "border border-neutral-300 hover:bg-neutral-50"
+                        rate === r ? "bg-indigo-500 text-white" : "border border-neutral-300 hover:bg-neutral-50"
                       }`}
                     >
                       {r}%
@@ -1073,7 +1073,7 @@ function PaybackModal({
               <button
                 onClick={add}
                 disabled={pending}
-                className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
               >
                 페이백 추가
               </button>
@@ -1776,7 +1776,7 @@ function AccountModal({
           <button
             onClick={save}
             disabled={pending}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
           >
             {pending ? "저장 중…" : "저장"}
           </button>
@@ -1908,7 +1908,7 @@ function TxnModal({
         <button
           onClick={save}
           disabled={pending}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+          className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
         >
           {pending ? "저장 중…" : "저장"}
         </button>
@@ -2116,7 +2116,7 @@ function ImportModal({
           <button
             onClick={() => setInputMode("import")}
             className={`rounded-md px-3 py-1 font-medium ${
-              inputMode === "import" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"
+              inputMode === "import" ? "bg-indigo-500 text-white" : "text-neutral-500 hover:text-neutral-800"
             }`}
           >
             📂 파일·붙여넣기
@@ -2124,7 +2124,7 @@ function ImportModal({
           <button
             onClick={switchToManual}
             className={`rounded-md px-3 py-1 font-medium ${
-              inputMode === "manual" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"
+              inputMode === "manual" ? "bg-indigo-500 text-white" : "text-neutral-500 hover:text-neutral-800"
             }`}
           >
             ▦ 직접 입력(엑셀형)

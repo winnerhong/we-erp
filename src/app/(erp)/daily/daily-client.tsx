@@ -105,7 +105,7 @@ export function DailyClient({ date, sales, purchases, buys, bankIn, bankOut, mon
       </div>
 
       {/* 통장 실입출금(실제 현금) */}
-      <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 bg-indigo-600 p-4 text-sm text-white">
+      <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 bg-indigo-500 p-4 text-sm text-white">
         <span className="text-neutral-300">🏦 통장 실제 입출금</span>
         <span>
           입금 <span className="font-semibold text-emerald-300">+{krw(bankIn)}</span>

@@ -124,7 +124,7 @@ export function DocumentIssuePanel({
         {canIssue && (
           <button
             onClick={() => setOpen(true)}
-            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+            className="rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400"
           >
             + 서류 발행
           </button>
@@ -400,7 +400,7 @@ function IssueModal({
           <button
             onClick={issue}
             disabled={!tpl}
-            className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+            className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
           >
             발행
           </button>

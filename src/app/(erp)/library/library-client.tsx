@@ -57,7 +57,7 @@ export function LibraryClient({
         actions={canManage ? (
           <div className="flex gap-2">
             <button onClick={() => setFolderMgr(true)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50">🗂️ 폴더 관리</button>
-            <button onClick={() => setUploadFor(null)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">⬆ 파일 올리기</button>
+            <button onClick={() => setUploadFor(null)} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400">⬆ 파일 올리기</button>
           </div>
         ) : null}
       />
@@ -174,7 +174,7 @@ function UploadModal({
     <ModalShell title="파일 올리기" onClose={onClose} footer={
       <>
         <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">취소</button>
-        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{pending ? "올리는 중…" : "올리기"}</button>
+        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">{pending ? "올리는 중…" : "올리기"}</button>
       </>
     }>
       <FileButton label="파일 선택" onFile={(f) => { setFile(f); if (!title) setTitle(f.name.replace(/\.[^.]+$/, "")); }} />
@@ -235,7 +235,7 @@ function EditModal({
     <ModalShell title="자료 수정" onClose={onClose} footer={
       <>
         <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">취소</button>
-        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{pending ? "저장 중…" : "저장"}</button>
+        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">{pending ? "저장 중…" : "저장"}</button>
       </>
     }>
       <label className="block">
@@ -275,7 +275,7 @@ function FolderManager({ folders, onClose, onChanged }: { folders: LibFolder[]; 
     }>
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); if (name.trim()) { run(() => createFolder(name, null)); setName(""); } }}>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="새 폴더 이름" className={inputCls} />
-        <button disabled={pending} className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">추가</button>
+        <button disabled={pending} className="shrink-0 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">추가</button>
       </form>
       <div className="space-y-1.5">
         {folders.map((f) => (

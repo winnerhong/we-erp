@@ -291,7 +291,7 @@ export function ExcelGrid<T>({
         <button
           onClick={() => setFilterOpen((v) => !v)}
           className={`rounded-lg border px-2.5 py-1.5 font-medium ${
-            filterOpen ? "border-neutral-800 bg-indigo-600 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
+            filterOpen ? "border-neutral-800 bg-indigo-500 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
           }`}
         >
           🔎 컬럼 필터
@@ -383,7 +383,7 @@ export function ExcelGrid<T>({
                   <span
                     onMouseDown={(e) => startResize(e, c.key)}
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-300"
+                    className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-indigo-400"
                   />
                 </th>
               ))}
@@ -542,7 +542,7 @@ export function ExcelGrid<T>({
               </button>
               <button
                 onClick={() => changeLimit(null)}
-                className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-700"
+                className="rounded-lg bg-indigo-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
               >
                 전체 {view.length.toLocaleString()}건 보기
               </button>

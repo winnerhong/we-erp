@@ -37,7 +37,7 @@ export function OrgClient({
       <div className="mb-4 flex flex-wrap items-center gap-3 print:hidden">
         <div className="flex rounded-lg border border-neutral-200 bg-white p-1 text-sm">
           {([["group", "🌐 전체 그룹"], ["single", "🏢 사업자별"]] as const).map(([k, lbl]) => (
-            <button key={k} onClick={() => setMode(k)} className={`rounded-md px-3 py-1.5 font-medium ${mode === k ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>{lbl}</button>
+            <button key={k} onClick={() => setMode(k)} className={`rounded-md px-3 py-1.5 font-medium ${mode === k ? "bg-indigo-500 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>{lbl}</button>
           ))}
         </div>
         {mode === "single" && (

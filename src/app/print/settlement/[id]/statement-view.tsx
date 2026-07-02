@@ -26,7 +26,7 @@ export function StatementView({ data }: { data: StmtData }) {
     <div className="min-h-screen bg-neutral-100 py-6 print:bg-white print:py-0">
       <div className="mx-auto max-w-[800px] px-4 print:max-w-none print:px-0">
         <div className="mb-4 flex justify-end gap-2 print:hidden">
-          <button onClick={() => window.print()} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500">🖨 인쇄 / PDF 저장</button>
+          <button onClick={() => window.print()} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400">🖨 인쇄 / PDF 저장</button>
         </div>
 
         <div className="bg-white p-10 shadow-sm print:p-0 print:shadow-none">
@@ -40,7 +40,7 @@ export function StatementView({ data }: { data: StmtData }) {
           </div>
 
           {/* 합계 강조 */}
-          <div className="mb-4 flex items-center justify-between rounded-lg bg-indigo-600 px-5 py-3 text-white">
+          <div className="mb-4 flex items-center justify-between rounded-lg bg-indigo-500 px-5 py-3 text-white">
             <span className="text-sm">합계금액 (공급가액 + 세액)</span>
             <span className="text-xl font-bold tabular-nums">{krw(data.total)}</span>
           </div>

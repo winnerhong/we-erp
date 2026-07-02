@@ -94,7 +94,7 @@ export function LibraryBrowser({
         <SideBtn active={sel === "none"} icon="📦" label="미분류" n={countIn(null)} onClick={() => setSel("none")} />
         {canManage && onUpload && (
           <button onClick={() => onUpload(sel !== "all" && sel !== "fav" && sel !== "recent" && sel !== "none" ? sel : null)}
-            className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+            className="mt-2 w-full rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400">
             ⬆ 파일 올리기
           </button>
         )}
@@ -131,7 +131,7 @@ function SideBtn({ active, icon, label, n, onClick }: { active: boolean; icon: s
   return (
     <button
       onClick={onClick}
-      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-indigo-600 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
+      className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm ${active ? "bg-indigo-500 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
     >
       <span>{icon}</span>
       <span className="flex-1 truncate">{label}</span>

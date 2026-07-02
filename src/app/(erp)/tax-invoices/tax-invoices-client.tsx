@@ -132,7 +132,7 @@ export function TaxInvoicesClient({ rows, partners, linkedIds, month, activeComp
         <button
           onClick={() => setAdding(true)}
           disabled={!activeCompanyId}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+          className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
         >
           + {TAX_INVOICE_TYPE_LABEL[tab]} 추가
         </button>
@@ -432,7 +432,7 @@ function TaxInvoiceModal({
         {error && <p className="px-5 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
           <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">취소</button>
-          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
+          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">
             {pending ? "저장 중…" : "저장"}
           </button>
         </div>

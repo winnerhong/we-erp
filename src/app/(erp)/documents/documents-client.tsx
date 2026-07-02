@@ -30,20 +30,20 @@ export function DocumentsClient({ templates, issues }: { templates: DocumentTemp
           <button
             key={t.id}
             onClick={() => setSel(t.id)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${sel === t.id ? "bg-indigo-600 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"}`}
+            className={`rounded-lg px-3 py-1.5 text-sm font-medium ${sel === t.id ? "bg-indigo-500 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"}`}
           >
             {t.name}
           </button>
         ))}
         <button
           onClick={() => setSel("new")}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${sel === "new" ? "bg-indigo-600 text-white" : "border border-dashed border-neutral-400 bg-white text-neutral-600 hover:bg-neutral-50"}`}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium ${sel === "new" ? "bg-indigo-500 text-white" : "border border-dashed border-neutral-400 bg-white text-neutral-600 hover:bg-neutral-50"}`}
         >
           ＋ 새 양식
         </button>
         <button
           onClick={() => setSel("issues")}
-          className={`ml-auto rounded-lg px-3 py-1.5 text-sm font-medium ${sel === "issues" ? "bg-indigo-600 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"}`}
+          className={`ml-auto rounded-lg px-3 py-1.5 text-sm font-medium ${sel === "issues" ? "bg-indigo-500 text-white" : "border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50"}`}
         >
           📋 발행이력 <span className="text-xs opacity-70">{issues.length}</span>
         </button>

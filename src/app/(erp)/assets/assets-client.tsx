@@ -52,7 +52,7 @@ export function AssetsClient({ items, companyId, categories }: { items: AssetIte
         actions={
           <div className="flex gap-2">
             <button onClick={() => setQrOpen(true)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50">🏷 QR 라벨</button>
-            <button onClick={() => setAddOpen(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">+ 교구 등록</button>
+            <button onClick={() => setAddOpen(true)} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400">+ 교구 등록</button>
           </div>
         }
       />
@@ -156,7 +156,7 @@ function AssetAddModal({ companyId, categories, onClose, onSaved }: { companyId:
         </div>
         <div className="flex justify-end gap-2 border-t border-neutral-100 px-5 py-3">
           <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">취소</button>
-          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{pending ? "저장 중…" : "등록"}</button>
+          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">{pending ? "저장 중…" : "등록"}</button>
         </div>
       </div>
     </div>
@@ -171,7 +171,7 @@ function QrLabelsModal({ items, onClose }: { items: AssetItem[]; onClose: () => 
         <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3 print:hidden">
           <h3 className="font-semibold text-neutral-800">QR 라벨 ({items.length})</h3>
           <div className="flex gap-2">
-            <button onClick={() => window.print()} className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500">🖨 인쇄</button>
+            <button onClick={() => window.print()} className="rounded-lg bg-indigo-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-400">🖨 인쇄</button>
             <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">✕</button>
           </div>
         </div>

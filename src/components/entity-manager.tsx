@@ -183,7 +183,7 @@ export function EntityManager<T extends Row>({
           <BulkImport kind={kind} ctx={ctx} />
           <button
             onClick={openAdd}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+            className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
           >
             + 추가
           </button>
@@ -363,7 +363,7 @@ export function EntityManager<T extends Row>({
               <button
                 onClick={submit}
                 disabled={pending}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
               >
                 {pending ? "저장 중…" : "저장"}
               </button>

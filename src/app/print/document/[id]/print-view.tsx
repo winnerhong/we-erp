@@ -17,7 +17,7 @@ export function PrintView({ title, body }: { title: string; body: string }) {
       <div className="mx-auto mb-4 flex max-w-[210mm] justify-end gap-2 px-4 print:hidden">
         <button
           onClick={() => window.print()}
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400"
         >
           🖨 인쇄 / PDF 저장
         </button>
