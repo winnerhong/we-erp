@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureUser } from "@/lib/auth-guard";
 import { parseBankRow, bankSourceRef } from "@/lib/bank-import";
+import { matchGroupId } from "@/lib/bank-groups";
 import type { BankAccountRow, BankTransactionRow } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -524,6 +525,35 @@ export async function bulkImportTransactions(
     const have = new Set((existing ?? []).map((e) => (e as { source_ref: string }).source_ref));
     const fresh = toInsert.filter((r) => !have.has(r.source_ref as string));
     skipped = toInsert.length - fresh.length;
+
+    // 정기거래 그룹 자동 매칭 — 이름이 그룹 키워드에 걸리면 group_id + 기본값(거래처·계정·구분) 자동 적용.
+    // (그룹 테이블 미적용 시 select 실패 → groups 비어 안전하게 건너뜀)
+    if (fresh.length > 0) {
+      const { data: grpData } = await db
+        .from("bank_txn_groups")
+        .select("id, match_keys, direction, default_partner_id, default_account_id, default_category")
+        .eq("company_id", companyId)
+        .order("name");
+      const groups = (grpData ?? []) as {
+        id: string; match_keys: string[]; direction: string | null;
+        default_partner_id: string | null; default_account_id: string | null; default_category: string | null;
+      }[];
+      if (groups.length > 0) {
+        const gmap = new Map(groups.map((g) => [g.id, g]));
+        for (const r of fresh) {
+          const gid = matchGroupId(
+            { description: (r.description as string) ?? null, counterparty: (r.counterparty as string) ?? null, direction: r.direction as string },
+            groups
+          );
+          if (!gid) continue;
+          r.group_id = gid;
+          const g = gmap.get(gid)!;
+          if (g.default_partner_id && r.partner_id == null) r.partner_id = g.default_partner_id;
+          if (g.default_account_id && r.account_id == null) r.account_id = g.default_account_id;
+          if (g.default_category && r.category == null) r.category = g.default_category;
+        }
+      }
+    }
 
     if (fresh.length > 0) {
       let { data, error } = await db.from("bank_transactions").insert(fresh as never[]).select("id");

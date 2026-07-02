@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Field, TextInput, NumberInput } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
@@ -42,6 +42,19 @@ import {
   payPayback,
   unpayPayback,
 } from "./actions";
+import {
+  createBankGroup,
+  updateBankGroup,
+  deleteBankGroup,
+  setTxnGroup,
+  suggestGroups,
+  createGroupsFromSuggestions,
+  getGroupCounts,
+  type GroupInput,
+  type NewGroupFromSuggestion,
+} from "./group-actions";
+import type { BankTxnGroupRow } from "@/lib/supabase/database.types";
+import type { ClusterSuggestion } from "@/lib/bank-groups";
 
 export interface PartnerOption {
   id: string;
@@ -111,6 +124,7 @@ interface Props {
   employees: { id: string; name: string; company_id: string | null }[];
   paybacksByTxn: Record<string, PaybackRow[]>;
   cardAlias: Record<string, string>;
+  groups: BankTxnGroupRow[];
 }
 
 // 원천징수율 프리셋(직접입력 항상 가능)
@@ -160,8 +174,11 @@ export function BankClient({
   employees,
   paybacksByTxn,
   cardAlias,
+  groups,
 }: Props) {
   const router = useRouter();
+  const [groupModalOpen, setGroupModalOpen] = useState(false);
+  const gName = new Map(groups.map((g) => [g.id, g.name]));
   const [optsOpen, setOptsOpen] = useState(false);
   const [acctModal, setAcctModal] = useState<BankAccountRow | "new" | null>(null);
   const [txnModal, setTxnModal] = useState<BankTransactionRow | "new" | null>(null);
@@ -339,6 +356,13 @@ export function BankClient({
       render: (t) => <PartyCell txn={t} partners={partners} employees={employees} onChanged={refresh} />,
     },
     {
+      key: "group_id",
+      label: "그룹",
+      width: 130,
+      text: (t) => (t.group_id ? gName.get(t.group_id) ?? "" : ""),
+      render: (t) => <GroupCell txn={t} groups={groups} onManage={() => setGroupModalOpen(true)} onChanged={refresh} />,
+    },
+    {
       key: "tax_status",
       label: "계산서",
       width: 130,
@@ -462,11 +486,13 @@ export function BankClient({
   // 미지정 판정 + 필터
   const noPartner = (t: TxnWithBalance) => !t.partner_id;
   const noTax = (t: TxnWithBalance) => !t.tax_status || t.tax_status === "NEEDED";
+  const noGroup = (t: TxnWithBalance) => !t.group_id;
   const noPartnerCount = monthTxns.filter(noPartner).length;
   const noTaxCount = monthTxns.filter(noTax).length;
-  const [rowFilter, setRowFilter] = useState<"all" | "no_partner" | "no_tax">("all");
+  const noGroupCount = monthTxns.filter(noGroup).length;
+  const [rowFilter, setRowFilter] = useState<"all" | "no_partner" | "no_tax" | "no_group">("all");
   const visibleTxns = monthTxns.filter((t) =>
-    rowFilter === "no_partner" ? noPartner(t) : rowFilter === "no_tax" ? noTax(t) : true
+    rowFilter === "no_partner" ? noPartner(t) : rowFilter === "no_tax" ? noTax(t) : rowFilter === "no_group" ? noGroup(t) : true
   );
 
   return (
@@ -625,6 +651,7 @@ export function BankClient({
                 ["all", `전체 ${monthTxns.length}`],
                 ["no_partner", `거래처 미지정 ${noPartnerCount}`],
                 ["no_tax", `계산서 미처리 ${noTaxCount}`],
+                ["no_group", `그룹 미분류 ${noGroupCount}`],
               ] as const).map(([key, label]) => (
                 <button
                   key={key}
@@ -640,6 +667,13 @@ export function BankClient({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => setGroupModalOpen(true)}
+                title="정기거래 그룹 — 매달 비슷한 거래를 묶어 거래처·계정·구분 자동화"
+                className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+              >
+                🔗 그룹 {groups.length > 0 && <span className="text-xs text-neutral-400">{groups.length}</span>}
+              </button>
               <button
                 onClick={() => setImportOpen(true)}
                 title="거래내역 올리기 (자동 병합)"
@@ -711,6 +745,19 @@ export function BankClient({
             <span className="font-bold text-neutral-900">월말 {krw(endBalance)}</span>
           </div>
         </>
+      )}
+
+      {groupModalOpen && (
+        <GroupManagerModal
+          groups={groups}
+          partners={partners}
+          accounts={accountOptions}
+          categories={categoryOptions}
+          activeCompanyId={activeCompanyId}
+          monthTxns={monthTxns}
+          onClose={() => setGroupModalOpen(false)}
+          onChanged={refresh}
+        />
       )}
 
       {optsOpen && (
@@ -2370,6 +2417,398 @@ function ReceiptPickerModal({
 }
 
 // ---------- 공통 모달 셸 ----------
+// ---------- 정기거래 그룹: 행 셀(그룹 지정/해제) ----------
+function GroupCell({
+  txn,
+  groups,
+  onManage,
+  onChanged,
+}: {
+  txn: TxnWithBalance;
+  groups: BankTxnGroupRow[];
+  onManage: () => void;
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  if (groups.length === 0) {
+    return (
+      <button onClick={onManage} className="text-xs text-neutral-400 hover:text-indigo-600">
+        + 그룹 만들기
+      </button>
+    );
+  }
+  return (
+    <SearchableSelect
+      value={txn.group_id ?? ""}
+      onChange={(v) =>
+        startTransition(async () => {
+          await setTxnGroup(txn.id, v || null);
+          onChanged();
+        })
+      }
+      options={groups.map((g) => ({ value: g.id, label: g.name }))}
+      emptyOption="미분류"
+      placeholder="그룹"
+      disabled={pending}
+    />
+  );
+}
+
+// ---------- 정기거래 그룹: 관리 모달 ----------
+function GroupManagerModal({
+  groups,
+  partners,
+  accounts,
+  categories,
+  activeCompanyId,
+  monthTxns,
+  onClose,
+  onChanged,
+}: {
+  groups: BankTxnGroupRow[];
+  partners: PartnerOption[];
+  accounts: { id: string; code: string; name: string }[];
+  categories: FieldOptionRow[];
+  activeCompanyId: string | null;
+  monthTxns: TxnWithBalance[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [busy, startTransition] = useTransition();
+  const [suggestions, setSuggestions] = useState<ClusterSuggestion[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sugNames, setSugNames] = useState<Record<string, string>>({});
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [creating, setCreating] = useState(false);
+
+  // 이번달 소속 건수(무료)
+  const monthCount: Record<string, number> = {};
+  for (const t of monthTxns) if (t.group_id) monthCount[t.group_id] = (monthCount[t.group_id] ?? 0) + 1;
+
+  // 전체 소속 건수 지연 로드
+  useEffect(() => {
+    if (groups.length === 0) return;
+    getGroupCounts(groups.map((g) => g.id))
+      .then(setCounts)
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 후보 고유 식별자 — 전체 모드에서 사업자가 달라도 같은 이름(key)이 충돌하지 않게
+  const uid = (s: ClusterSuggestion) => `${s.companyId}::${s.key}`;
+
+  function runScan() {
+    startTransition(async () => {
+      const r = await suggestGroups(activeCompanyId);
+      if (!r.ok) {
+        alert(r.error);
+        return;
+      }
+      const sugs = r.suggestions ?? [];
+      setSuggestions(sugs);
+      setPicked(new Set(sugs.map(uid)));
+      setSugNames(Object.fromEntries(sugs.map((s) => [uid(s), s.name])));
+    });
+  }
+  function toggle(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function createSelected() {
+    if (!suggestions) return;
+    const items: NewGroupFromSuggestion[] = suggestions
+      .filter((s) => picked.has(uid(s)))
+      .map((s) => ({ name: sugNames[uid(s)] ?? s.name, key: s.key, direction: s.direction, txnIds: s.txnIds, companyId: s.companyId }));
+    if (items.length === 0) return;
+    startTransition(async () => {
+      const r = await createGroupsFromSuggestions(activeCompanyId, items);
+      if (!r.ok) {
+        alert(`${r.error ?? "생성 실패"}${r.count ? `\n(${r.count}개는 생성됨)` : ""}`);
+        setSuggestions(null);
+        setPicked(new Set());
+        onChanged();
+        return;
+      }
+      setSuggestions(null);
+      setPicked(new Set());
+      onChanged();
+    });
+  }
+
+  return (
+    <Modal title="🔗 정기거래 그룹" onClose={onClose} wide>
+      <div className="max-h-[76vh] space-y-4 overflow-y-auto p-5">
+        {/* 자동 묶기 */}
+        <section className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-neutral-800">자동 묶기</p>
+              <p className="text-xs text-neutral-500">미분류 거래 중 비슷한 이름(2건+)을 스캔해 그룹 후보를 찾습니다.</p>
+            </div>
+            <button
+              onClick={runScan}
+              disabled={busy}
+              className="shrink-0 rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
+            >
+              {busy ? "스캔 중…" : "🔍 스캔"}
+            </button>
+          </div>
+          {suggestions &&
+            (suggestions.length === 0 ? (
+              <p className="mt-3 text-center text-sm text-neutral-400">묶을 후보가 없습니다.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <div className="max-h-60 space-y-1 overflow-y-auto pr-1">
+                  {suggestions.map((s) => (
+                    <label key={uid(s)} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5">
+                      <input type="checkbox" checked={picked.has(uid(s))} onChange={() => toggle(uid(s))} className="shrink-0" />
+                      <input
+                        value={sugNames[uid(s)] ?? s.name}
+                        onChange={(e) => setSugNames((p) => ({ ...p, [uid(s)]: e.target.value }))}
+                        className="min-w-0 flex-1 rounded border border-neutral-200 px-2 py-1 text-sm focus:border-neutral-400 focus:outline-none"
+                      />
+                      <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500">
+                        {s.count}건{s.direction === "IN" ? " · 입금" : s.direction === "OUT" ? " · 출금" : ""}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={createSelected}
+                    disabled={busy || picked.size === 0}
+                    className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-40"
+                  >
+                    {picked.size}개 그룹 생성
+                  </button>
+                </div>
+              </div>
+            ))}
+        </section>
+
+        {/* 기존 그룹 */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-neutral-800">그룹 {groups.length}개</p>
+            <button onClick={() => setCreating((v) => !v)} className="rounded-lg border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-50">
+              + 새 그룹
+            </button>
+          </div>
+          {creating && (
+            <GroupEditor
+              partners={partners}
+              accounts={accounts}
+              categories={categories}
+              saving={busy}
+              onCancel={() => setCreating(false)}
+              onSave={(input) =>
+                startTransition(async () => {
+                  const r = await createBankGroup(activeCompanyId, input);
+                  if (!r.ok) {
+                    alert(r.error);
+                    return;
+                  }
+                  setCreating(false);
+                  onChanged();
+                })
+              }
+            />
+          )}
+          {groups.length === 0 && !creating && (
+            <p className="py-6 text-center text-sm text-neutral-400">아직 그룹이 없습니다. ‘자동 묶기’ 또는 ‘+ 새 그룹’으로 시작하세요.</p>
+          )}
+          {groups.map((g) => (
+            <GroupRow
+              key={g.id}
+              group={g}
+              partners={partners}
+              accounts={accounts}
+              categories={categories}
+              monthCount={monthCount[g.id] ?? 0}
+              totalCount={counts[g.id]}
+              onChanged={onChanged}
+            />
+          ))}
+        </section>
+      </div>
+    </Modal>
+  );
+}
+
+function GroupRow({
+  group,
+  partners,
+  accounts,
+  categories,
+  monthCount,
+  totalCount,
+  onChanged,
+}: {
+  group: BankTxnGroupRow;
+  partners: PartnerOption[];
+  accounts: { id: string; code: string; name: string }[];
+  categories: FieldOptionRow[];
+  monthCount: number;
+  totalCount?: number;
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, startTransition] = useTransition();
+  const pName = partners.find((p) => p.id === group.default_partner_id)?.name;
+  const aRow = accounts.find((a) => a.id === group.default_account_id);
+  const cLabel = categories.find((c) => c.value === group.default_category)?.label;
+
+  if (editing) {
+    return (
+      <GroupEditor
+        initial={group}
+        partners={partners}
+        accounts={accounts}
+        categories={categories}
+        saving={saving}
+        onCancel={() => setEditing(false)}
+        onSave={(input) =>
+          startTransition(async () => {
+            const r = await updateBankGroup(group.id, input);
+            if (!r.ok) {
+              alert(r.error);
+              return;
+            }
+            setEditing(false);
+            onChanged();
+          })
+        }
+      />
+    );
+  }
+  return (
+    <div className="flex items-start justify-between gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2.5">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold text-neutral-800">{group.name}</span>
+          {group.direction && (
+            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] text-neutral-500">{group.direction === "IN" ? "입금" : "출금"}</span>
+          )}
+          <span className="text-xs text-neutral-400">
+            이번달 {monthCount}건{totalCount != null ? ` · 총 ${totalCount}건` : ""}
+          </span>
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-1 text-[11px]">
+          {group.match_keys.length > 0 ? (
+            group.match_keys.map((k) => (
+              <span key={k} className="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600">#{k}</span>
+            ))
+          ) : (
+            <span className="text-neutral-300">키워드 없음 — 수정에서 추가하면 자동 매칭됩니다</span>
+          )}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-neutral-400">
+          <span>거래처: {pName ?? "—"}</span>
+          <span>계정: {aRow ? `${aRow.code} ${aRow.name}` : "—"}</span>
+          <span>구분: {cLabel ?? "—"}</span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button onClick={() => setEditing(true)} className="rounded-md px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100">수정</button>
+        <button
+          onClick={() => {
+            if (confirm(`'${group.name}' 그룹을 삭제할까요?\n소속 거래는 미분류로 돌아갑니다(거래처·계정·구분 값은 유지).`))
+              startTransition(async () => {
+                await deleteBankGroup(group.id);
+                onChanged();
+              });
+          }}
+          disabled={saving}
+          className="rounded-md px-2 py-1 text-xs text-rose-500 hover:bg-rose-50 disabled:opacity-50"
+        >
+          삭제
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GroupEditor({
+  initial,
+  partners,
+  accounts,
+  categories,
+  saving,
+  onSave,
+  onCancel,
+}: {
+  initial?: BankTxnGroupRow;
+  partners: PartnerOption[];
+  accounts: { id: string; code: string; name: string }[];
+  categories: FieldOptionRow[];
+  saving?: boolean;
+  onSave: (input: GroupInput) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [keys, setKeys] = useState((initial?.match_keys ?? []).join(", "));
+  const [dir, setDir] = useState(initial?.direction ?? "");
+  const [pid, setPid] = useState(initial?.default_partner_id ?? "");
+  const [aid, setAid] = useState(initial?.default_account_id ?? "");
+  const [cat, setCat] = useState(initial?.default_category ?? "");
+
+  function submit() {
+    if (!name.trim()) {
+      alert("그룹명을 입력하세요");
+      return;
+    }
+    onSave({
+      name,
+      direction: dir || null,
+      match_keys: keys.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean),
+      default_partner_id: pid || null,
+      default_account_id: aid || null,
+      default_category: cat || null,
+    });
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <Field label="그룹명">
+          <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="예: 현대카드" />
+        </Field>
+        <Field label="방향">
+          <select value={dir} onChange={(e) => setDir(e.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none">
+            <option value="">입·출금 모두</option>
+            <option value="IN">입금만</option>
+            <option value="OUT">출금만</option>
+          </select>
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="자동매칭 키워드 (쉼표로 구분 · 내용/거래처에 포함되면 이 그룹으로)">
+            <TextInput value={keys} onChange={(e) => setKeys(e.target.value)} placeholder="현대카드, 현대카드대금" />
+          </Field>
+        </div>
+        <Field label="거래처 (자동 지정)">
+          <SearchableSelect value={pid} onChange={setPid} options={partners.map((p) => ({ value: p.id, label: p.name }))} emptyOption="지정 안 함" placeholder="거래처" />
+        </Field>
+        <Field label="계정과목 (자동 지정)">
+          <SearchableSelect value={aid} onChange={setAid} options={accounts.map((a) => ({ value: a.id, label: `${a.code} ${a.name}` }))} emptyOption="지정 안 함" placeholder="계정과목" />
+        </Field>
+        <Field label="구분 (자동 지정)">
+          <SearchableSelect value={cat} onChange={setCat} options={categories.map((c) => ({ value: c.value, label: c.label }))} emptyOption="지정 안 함" placeholder="구분" />
+        </Field>
+      </div>
+      <div className="flex justify-end gap-2">
+        <button onClick={onCancel} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50">취소</button>
+        <button onClick={submit} disabled={saving} className="rounded-lg bg-indigo-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">
+          저장
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Modal({
   title,
   children,

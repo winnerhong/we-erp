@@ -7,7 +7,7 @@ import {
   type AccountBalance,
   type TradeInvoiceView,
 } from "./bank-client";
-import type { BankAccountRow, BankTransactionRow, PaybackRow } from "@/lib/supabase/database.types";
+import type { BankAccountRow, BankTransactionRow, PaybackRow, BankTxnGroupRow } from "@/lib/supabase/database.types";
 
 export const metadata = { title: "통장원장" };
 
@@ -99,6 +99,8 @@ export default async function BankPage({
   if (filter) cardQ = cardQ.eq("company_id", filter);
   let receiptQuery = supabase.from("receipts").select("id, vendor_name, total_amount, doc_date, company_id").eq("status", "CONFIRMED").order("doc_date", { ascending: false });
   if (filter) receiptQuery = receiptQuery.eq("company_id", filter);
+  let groupQ = supabase.from("bank_txn_groups").select("*").order("name");
+  if (filter) groupQ = groupQ.eq("company_id", filter);
 
   // ---- 독립 목록 쿼리 일괄 병렬 ----
   const [
@@ -108,6 +110,7 @@ export default async function BankPage({
     { data: empData },
     { data: cardData },
     { data: receiptData },
+    { data: groupData },
   ] = await Promise.all([
     partnerScope("id, name, default_tax_rate"),
     supabase.from("accounts").select("id, code, name").eq("is_active", true).order("code"),
@@ -115,7 +118,9 @@ export default async function BankPage({
     empQuery,
     cardQ,
     receiptQuery,
+    groupQ,
   ]);
+  const groups = (groupData ?? []) as BankTxnGroupRow[];
 
   let partners: PartnerOpt[];
   if (partnerErr) {
@@ -286,6 +291,7 @@ export default async function BankPage({
       employees={employees}
       paybacksByTxn={paybacksByTxn}
       cardAlias={cardAlias}
+      groups={groups}
     />
   );
 }
