@@ -40,25 +40,21 @@ export function HoverPreview({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const timer = useRef<number | undefined>(undefined);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   function enter() {
-    timer.current = window.setTimeout(() => {
-      const el = ref.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      let left = r.right + 10;
-      if (left + CARD_W > window.innerWidth - 8) left = r.left - CARD_W - 10; // 오른쪽 넘치면 왼쪽으로
-      if (left < 8) left = 8;
-      let top = r.top;
-      if (top + CARD_H > window.innerHeight - 8) top = window.innerHeight - CARD_H - 8;
-      if (top < 8) top = 8;
-      setPos({ top, left });
-    }, 220);
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    let left = r.right + 10;
+    if (left + CARD_W > window.innerWidth - 8) left = r.left - CARD_W - 10; // 오른쪽 넘치면 왼쪽으로
+    if (left < 8) left = 8;
+    let top = r.top;
+    if (top + CARD_H > window.innerHeight - 8) top = window.innerHeight - CARD_H - 8;
+    if (top < 8) top = 8;
+    setPos({ top, left });
   }
   function leave() {
-    window.clearTimeout(timer.current);
     setPos(null);
   }
 
