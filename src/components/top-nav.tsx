@@ -48,7 +48,12 @@ export function TopNav({ allowedHrefs, isAdmin }: { allowedHrefs: string[]; isAd
           const groupOn = g.items.some((i) => isActive(i.href)) || g.admin.some((a) => isActive(a.href));
           const isOpen = open === g.label;
           return (
-            <div key={g.label} className="relative">
+            <div
+              key={g.label}
+              className="relative"
+              onMouseEnter={() => setOpen(g.label)}
+              onMouseLeave={() => setOpen((cur) => (cur === g.label ? null : cur))}
+            >
               <button
                 onClick={() => setOpen(isOpen ? null : g.label)}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 font-medium ${
@@ -60,7 +65,7 @@ export function TopNav({ allowedHrefs, isAdmin }: { allowedHrefs: string[]; isAd
                 <span className={`text-[9px] transition-transform ${isOpen ? "rotate-180" : ""}`}>▾</span>
               </button>
               {isOpen && (
-                <div className="absolute left-0 top-full z-40 mt-1 min-w-[190px] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg">
+                <div className="absolute left-0 top-full z-40 min-w-[190px] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg">
                   {g.items.map((i) => (
                     <Link
                       key={i.href}
