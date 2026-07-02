@@ -13,6 +13,7 @@ import type {
   LaborContractRow,
   EmployeeDocumentRow,
   EmployeeEventRow,
+  EmployeeMemoRow,
   PaybackRow,
   DocumentTemplateRow,
   DocumentIssueRow,
@@ -72,10 +73,11 @@ export default async function EmployeesPage({
   let contractsByEmp: Record<string, LaborContractRow[]> = {};
   let docsByEmp: Record<string, EmployeeDocumentRow[]> = {};
   let eventsByEmp: Record<string, EmployeeEventRow[]> = {};
+  let memosByEmp: Record<string, EmployeeMemoRow[]> = {};
   let docIssuesByEmp: Record<string, DocumentIssueRow[]> = {};
   const paybacksByEmp: Record<string, PaybackBrief[]> = {};
   if (empIds.length > 0) {
-    const [{ data: pays }, { data: leaves }, { data: certs }, { data: contracts }, { data: docs }, { data: events }, { data: issues }] =
+    const [{ data: pays }, { data: leaves }, { data: certs }, { data: contracts }, { data: docs }, { data: events }, { data: issues }, { data: memos }] =
       await Promise.all([
         supabase.from("payrolls").select("*").in("employee_id", empIds).order("year_month", { ascending: false }),
         supabase.from("leave_requests").select("*").in("employee_id", empIds).order("start_date", { ascending: false }),
@@ -88,6 +90,7 @@ export default async function EmployeesPage({
         supabase.from("employee_documents").select("*").in("employee_id", empIds).order("created_at", { ascending: false }),
         supabase.from("employee_events").select("*").in("employee_id", empIds).order("event_date", { ascending: false }),
         supabase.from("document_issues").select("*").in("employee_id", empIds).order("created_at", { ascending: false }),
+        supabase.from("employee_memos").select("*").in("employee_id", empIds).order("created_at", { ascending: false }),
       ]);
     payrollsByEmp = groupBy((pays ?? []) as PayrollRow[]);
     leavesByEmp = groupBy((leaves ?? []) as LeaveRequestRow[]);
@@ -95,6 +98,7 @@ export default async function EmployeesPage({
     contractsByEmp = groupBy((contracts ?? []) as LaborContractRow[]);
     docsByEmp = groupBy((docs ?? []) as EmployeeDocumentRow[]);
     eventsByEmp = groupBy((events ?? []) as EmployeeEventRow[]);
+    memosByEmp = groupBy((memos ?? []) as EmployeeMemoRow[]);
     docIssuesByEmp = groupBy((issues ?? []) as DocumentIssueRow[]);
 
     // 페이백 — 직원이 받는(또는 받을) 페이백. 출처 거래일·적요는 통장거래에서 보강.
@@ -160,6 +164,7 @@ export default async function EmployeesPage({
       contractsByEmp={contractsByEmp}
       docsByEmp={docsByEmp}
       eventsByEmp={eventsByEmp}
+      memosByEmp={memosByEmp}
       paybacksByEmp={paybacksByEmp}
       initialSelectedId={initialSelectedId}
       initialTab={sp.tab ?? null}

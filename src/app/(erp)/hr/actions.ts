@@ -312,3 +312,31 @@ export async function deleteEvent(id: string): Promise<Result> {
   revalidatePath("/employees");
   return { ok: true };
 }
+
+/** 직원 메모 로그 추가(누적). 작성자·시각 기록. */
+export async function addEmployeeMemo(employeeId: string, body: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const text = body.trim();
+  if (!text) return { ok: false, error: "메모를 입력하세요" };
+  const db = createAdminClient();
+  const { error } = await db.from("employee_memos").insert({
+    employee_id: employeeId,
+    body: text,
+    author_id: g.profile!.id,
+    author_name: g.profile!.username ?? g.profile!.email ?? "관리자",
+  } as never);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/employees");
+  return { ok: true };
+}
+
+export async function deleteEmployeeMemo(id: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { error } = await db.from("employee_memos").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/employees");
+  return { ok: true };
+}

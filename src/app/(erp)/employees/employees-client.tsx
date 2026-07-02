@@ -23,6 +23,7 @@ import type {
   LaborContractRow,
   EmployeeDocumentRow,
   EmployeeEventRow,
+  EmployeeMemoRow,
   DocumentTemplateRow,
   DocumentIssueRow,
 } from "@/lib/supabase/database.types";
@@ -44,6 +45,8 @@ import {
   deleteDocument,
   createEvent,
   deleteEvent,
+  addEmployeeMemo,
+  deleteEmployeeMemo,
 } from "@/app/(erp)/hr/actions";
 import {
   importTeachersFromWks,
@@ -176,6 +179,7 @@ export function EmployeesClient({
   contractsByEmp,
   docsByEmp,
   eventsByEmp,
+  memosByEmp,
   paybacksByEmp,
   documentTemplates,
   docIssuesByEmp,
@@ -194,6 +198,7 @@ export function EmployeesClient({
   contractsByEmp: Record<string, LaborContractRow[]>;
   docsByEmp: Record<string, EmployeeDocumentRow[]>;
   eventsByEmp: Record<string, EmployeeEventRow[]>;
+  memosByEmp: Record<string, EmployeeMemoRow[]>;
   paybacksByEmp: Record<string, PaybackBrief[]>;
   documentTemplates: DocumentTemplateRow[];
   docIssuesByEmp: Record<string, DocumentIssueRow[]>;
@@ -533,7 +538,7 @@ export function EmployeesClient({
               />
             )}
             {tab === "history" && (
-              <HistoryTab emp={selected} events={eventsByEmp[selected.id] ?? []} onChanged={refresh} />
+              <HistoryTab emp={selected} events={eventsByEmp[selected.id] ?? []} memos={memosByEmp[selected.id] ?? []} onChanged={refresh} />
             )}
           </div>
         )}
@@ -1904,15 +1909,19 @@ function DocsTab({
 }
 
 // ---------- 인사이력·메모 탭 ----------
-function HistoryTab({ emp, events, onChanged }: { emp: EmployeeRow; events: EmployeeEventRow[]; onChanged: () => void }) {
+function HistoryTab({ emp, events, memos, onChanged }: { emp: EmployeeRow; events: EmployeeEventRow[]; memos: EmployeeMemoRow[]; onChanged: () => void }) {
   const [pending, startTransition] = useTransition();
-  const [memo, setMemo] = useState(emp.memo ?? "");
+  const [memo, setMemo] = useState("");
   const [adding, setAdding] = useState(false);
   const [e, setE] = useState({ event_date: "", event_type: "발령", title: "", detail: "" });
 
   function saveMemo() {
+    const text = memo.trim();
+    if (!text) return;
     startTransition(async () => {
-      await updateRow("employees", emp.id, { memo: memo.trim() || null });
+      const r = await addEmployeeMemo(emp.id, text);
+      if (!r.ok) { alert(r.error); return; }
+      setMemo("");
       onChanged();
     });
   }
@@ -1985,26 +1994,53 @@ function HistoryTab({ emp, events, onChanged }: { emp: EmployeeRow; events: Empl
       </section>
 
       <section className="rounded-2xl border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 px-5 py-3">
-          <h3 className="font-semibold text-neutral-800">📝 메모</h3>
+        <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
+          <h3 className="font-semibold text-neutral-800">📝 메모 <span className="ml-1 text-xs font-normal text-neutral-400">{memos.length}건</span></h3>
         </div>
-        <div className="space-y-2 p-5">
-          <textarea
-            value={memo}
-            onChange={(ev) => setMemo(ev.target.value)}
-            rows={6}
-            placeholder="이 직원에 대한 메모…"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
-          />
-          <div className="text-right">
-            <button
-              onClick={saveMemo}
-              disabled={pending || memo === (emp.memo ?? "")}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40"
-            >
-              메모 저장
-            </button>
+        <div className="space-y-3 p-5">
+          {/* 새 메모 입력 → 누적 기록 */}
+          <div className="space-y-2">
+            <textarea
+              value={memo}
+              onChange={(ev) => setMemo(ev.target.value)}
+              onKeyDown={(ev) => { if ((ev.metaKey || ev.ctrlKey) && ev.key === "Enter") saveMemo(); }}
+              rows={3}
+              placeholder="메모를 입력하면 시각·작성자와 함께 계속 기록됩니다… (Ctrl+Enter로 저장)"
+              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
+            />
+            <div className="text-right">
+              <button
+                onClick={saveMemo}
+                disabled={pending || !memo.trim()}
+                className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-40"
+              >
+                기록 추가
+              </button>
+            </div>
           </div>
+
+          {/* 누적 메모 로그(최신순) */}
+          {memos.length === 0 ? (
+            <p className="py-6 text-center text-sm text-neutral-400">기록된 메모가 없습니다.</p>
+          ) : (
+            <ul className="space-y-2">
+              {memos.map((m) => (
+                <li key={m.id} className="group rounded-xl border border-neutral-100 bg-neutral-50/60 px-3.5 py-2.5">
+                  <div className="mb-1 flex items-center gap-2 text-[11px] text-neutral-400">
+                    <span className="font-medium text-neutral-500">{m.author_name ?? "작성자"}</span>
+                    <span className="tabular-nums">{m.created_at.slice(0, 16).replace("T", " ")}</span>
+                    <button
+                      onClick={() => { if (confirm("이 메모를 삭제할까요?")) startTransition(async () => { await deleteEmployeeMemo(m.id); onChanged(); }); }}
+                      className="ml-auto text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 hover:text-rose-500"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                  <p className="whitespace-pre-wrap text-sm text-neutral-700">{m.body}</p>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
     </div>

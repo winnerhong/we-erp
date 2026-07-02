@@ -253,6 +253,15 @@ export interface EmployeeEventRow {
   created_at: string;
 }
 
+export interface EmployeeMemoRow {
+  id: string;
+  employee_id: string;
+  body: string;
+  author_id: string | null;
+  author_name: string | null;
+  created_at: string;
+}
+
 export interface DailyRecordRow {
   id: string;
   company_id: string;
@@ -740,6 +749,7 @@ export interface Database {
       labor_contracts: TableShape<LaborContractRow, "employee_id">;
       employee_documents: TableShape<EmployeeDocumentRow, "employee_id">;
       employee_events: TableShape<EmployeeEventRow, "employee_id">;
+      employee_memos: TableShape<EmployeeMemoRow, "employee_id" | "body">;
       paybacks: TableShape<PaybackRow, "recipient_type">;
       profiles: TableShape<ProfileRow, "id">;
       field_options: TableShape<FieldOptionRow, "category" | "value" | "label">;
