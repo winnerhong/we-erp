@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { MENU_GROUPS, MENU_BY_HREF, type MenuItem } from "@/lib/menus";
+import { QuickMenu } from "@/components/quick-menu";
 
 const ADMIN_ITEMS: MenuItem[] = [
   { href: "/admin/users", label: "사용자 관리", icon: "🔑" },
@@ -92,6 +93,9 @@ export function TopNav({ allowedHrefs, isAdmin }: { allowedHrefs: string[]; isAd
             </div>
           );
         })}
+        <div className="ml-auto pl-2">
+          <QuickMenu allowedHrefs={allowedHrefs} />
+        </div>
       </nav>
     </div>
   );
