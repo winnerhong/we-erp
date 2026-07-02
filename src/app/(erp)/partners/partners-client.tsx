@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { InlineSelect } from "@/components/inline-select";
 import { OptionsManager } from "@/components/options-manager";
 import { BulkImport } from "@/components/bulk-import";
 import { ExcelGrid, type GridCol } from "@/components/excel-grid";
@@ -10,10 +9,11 @@ import { PaybackList, type PaybackBrief } from "@/components/payback-list";
 import { Card, Field, TextInput, NumberInput, SelectInput, Badge, EmptyState, FormSection } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
-import type { PartnerRow, FieldOptionRow, ContractRow, TransactionRow, SettlementRow, PartnerAttachmentRow } from "@/lib/supabase/database.types";
+import type { PartnerRow, FieldOptionRow, ContractRow, TransactionRow, SettlementRow, PartnerAttachmentRow, PartnerMemoRow } from "@/lib/supabase/database.types";
 import type { ImportCtx } from "@/lib/import-specs";
 import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
 import { importPartnersFromWks, bulkAssignCompany } from "./actions";
+import { addPartnerMemo, deletePartnerMemo } from "./crm-actions";
 import { CrmKpis, ContractsTab, TransactionsTab, SettlementsTab, AttachmentsTab } from "./crm-panel";
 import { HoverPreview, type PreviewData } from "@/components/hover-preview";
 import { PARTNER_KIND_LABEL, TAX_CATEGORY_LABEL, PAYMENT_TERMS_LABEL, PAYMENT_CYCLE_LABEL, EVIDENCE_TYPE_LABEL } from "@/lib/crm";
@@ -32,6 +32,11 @@ export interface LedgerEntry {
 
 const AUTO_KEY = "erp_wks_autosync";
 const AUTO_INTERVAL_MS = 5 * 60 * 1000; // 5분
+
+// 거래처 상세 탭 — 순서 변경 가능(localStorage 저장)
+type PartnerTab = "info" | "contract" | "txn" | "settle" | "files" | "memo" | "ledger" | "payback";
+const TAB_ORDER_KEY = "erp_partner_taborder";
+const DEFAULT_TAB_ORDER: PartnerTab[] = ["txn", "contract", "settle", "files", "info", "memo", "ledger", "payback"];
 
 function WksSyncControls() {
   const router = useRouter();
@@ -130,6 +135,7 @@ export function PartnersClient({
   transactions,
   settlements,
   attachments,
+  memos,
   employees,
   receivable,
   payable,
@@ -145,6 +151,7 @@ export function PartnersClient({
   transactions: TransactionRow[];
   settlements: SettlementRow[];
   attachments: PartnerAttachmentRow[];
+  memos: PartnerMemoRow[];
   employees: { id: string; name: string }[];
   receivable: number;
   payable: number;
@@ -156,7 +163,14 @@ export function PartnersClient({
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState<string>("ALL");
-  const [tab, setTab] = useState<"info" | "contract" | "txn" | "settle" | "files" | "ledger" | "payback">("txn");
+  // 진행중 기본. 단, 선택된 거래처가 종료 상태면 목록에서 보이도록 '전체'로 시작(하이라이트 유지)
+  const [seg, setSeg] = useState<"active" | "ended" | "all">(() =>
+    selectedId && rows.some((r) => r.id === selectedId && !r.is_active) ? "all" : "active"
+  );
+  const [tab, setTab] = useState<PartnerTab>("txn");
+  // 탭 순서(사용자 지정 · localStorage) + 순서변경 팝오버
+  const [tabOrder, setTabOrder] = useState<PartnerTab[]>(DEFAULT_TAB_ORDER);
+  const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [ledgerFilter, setLedgerFilter] = useState<"ALL" | LedgerEntry["source"]>("ALL");
   const [view, setView] = useState<"card" | "grid">("card");
   // 사업자 일괄배정 모드
@@ -164,6 +178,25 @@ export function PartnersClient({
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [assignTo, setAssignTo] = useState<string>(activeCompanyId ?? "");
   const [assigning, startAssign] = useTransition();
+
+  // 저장된 탭 순서 로드(신규 탭은 뒤에 자동 병합, 사라진 탭은 제거)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TAB_ORDER_KEY);
+      if (!raw) return;
+      const saved = (JSON.parse(raw) as string[]).filter((k): k is PartnerTab => (DEFAULT_TAB_ORDER as string[]).includes(k));
+      const merged = [...saved, ...DEFAULT_TAB_ORDER.filter((k) => !saved.includes(k))];
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setTabOrder(merged);
+      /* eslint-enable react-hooks/set-state-in-effect */
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function persistTabOrder(next: PartnerTab[]) {
+    setTabOrder(next);
+    try { localStorage.setItem(TAB_ORDER_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }
 
   const accountLabel = new Map(ctx.accounts.map((a) => [a.id, `${a.code} ${a.name}`]));
   const companyName = (id: string | null) => (id ? ctx.companies.find((c) => c.id === id)?.name ?? "?" : "공용");
@@ -175,11 +208,14 @@ export function PartnersClient({
   const catLabel = Object.fromEntries(
     options.filter((o) => o.category === "partner_category").map((o) => [o.value, o.label])
   ) as Record<string, string>;
-  const withCurrent = (sel: { value: string; label: string }[], value: string) =>
-    !value || sel.some((o) => o.value === value) ? sel : [{ value, label: catLabel[value] ?? value }, ...sel];
+
+  // 진행중/종료 세그먼트 — is_active=true 진행중(신규 거래·드롭다운 대상), false 종료(목록·이력엔 유지)
+  const activeCount = rows.filter((r) => r.is_active).length;
+  const endedCount = rows.filter((r) => !r.is_active).length;
+  const segRows = rows.filter((r) => (seg === "all" ? true : seg === "active" ? r.is_active : !r.is_active));
 
   const q = search.trim().toLowerCase();
-  const filtered = rows.filter((r) => {
+  const filtered = segRows.filter((r) => {
     if (catFilter !== "ALL" && r.category !== catFilter) return false;
     if (!q) return true;
     return `${r.name} ${r.category ?? ""} ${r.biz_no ?? ""} ${r.contact_name ?? ""} ${r.phone ?? ""}`
@@ -301,9 +337,9 @@ export function PartnersClient({
           onChanged={() => router.refresh()}
         />
       ) : (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
-        {/* 좌측 목록 */}
-        <div className="rounded-2xl border border-neutral-200 bg-white">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[300px_1fr]">
+        {/* 좌측 목록 — 화면 높이만큼 고정(sticky)해 우측이 길어져도 항상 꽉 찬 스크롤 영역 */}
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)]">
           <div className="space-y-2 border-b border-neutral-100 p-3">
             <input
               value={search}
@@ -311,10 +347,31 @@ export function PartnersClient({
               placeholder="🔍 상호·구분·사업자번호·담당자"
               className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
             />
+            {/* 진행중 / 종료 / 전체 세그먼트 */}
+            <div className="flex gap-1">
+              {([
+                ["active", "진행중", activeCount],
+                ["ended", "종료", endedCount],
+                ["all", "전체", rows.length],
+              ] as const).map(([k, label, n]) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    setSeg(k);
+                    setCatFilter("ALL"); // 세그먼트 바꾸면 카테고리 필터 초기화(빈 목록 방지)
+                  }}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                    seg === k ? "bg-indigo-500 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                  }`}
+                >
+                  {label} <span className={seg === k ? "text-neutral-300" : "text-neutral-400"}>{n}</span>
+                </button>
+              ))}
+            </div>
             <div className="flex flex-wrap gap-1">
-              {[{ value: "ALL", label: `전체 ${rows.length}` }, ...catActive.map((o) => ({
+              {[{ value: "ALL", label: `전체 ${segRows.length}` }, ...catActive.map((o) => ({
                 value: o.value,
-                label: `${o.label} ${rows.filter((r) => r.category === o.value).length}`,
+                label: `${o.label} ${segRows.filter((r) => r.category === o.value).length}`,
               }))].map((t) => (
                 <button
                   key={t.value}
@@ -345,7 +402,7 @@ export function PartnersClient({
               <span className="font-semibold text-indigo-700">{picked.size}개 선택됨</span>
             </div>
           )}
-          <div className="max-h-[68vh] divide-y divide-neutral-100 overflow-y-auto">
+          <div className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-neutral-400">거래처가 없습니다.</p>
             ) : (
@@ -353,11 +410,13 @@ export function PartnersClient({
                 const on = selected?.id === r.id;
                 const checked = picked.has(r.id);
                 const preview: PreviewData = {
+                  photoUrl: r.photo_url ?? undefined,
                   initial: r.name?.[0] ?? "?",
                   title: r.name,
                   subtitle: companyName(r.company_id),
                   badge: r.category ? { label: catLabel[r.category] ?? r.category, tone: catColor[r.category] || "neutral" } : null,
                   fields: [
+                    { label: "상태", value: r.is_active ? "진행중" : "종료" },
                     { label: "사업자번호", value: r.biz_no || "" },
                     { label: "대표자", value: r.rep_name || "" },
                     { label: "담당자", value: r.contact_name || "" },
@@ -372,11 +431,12 @@ export function PartnersClient({
                     onClick={() => (selectMode ? togglePick(r.id) : go(r.id))}
                     className={`flex w-full items-center gap-2 px-3 py-2.5 text-left transition ${
                       selectMode ? (checked ? "bg-indigo-50" : "hover:bg-neutral-50") : on ? "bg-indigo-50" : "hover:bg-neutral-50"
-                    }`}
+                    } ${!r.is_active ? "opacity-60" : ""}`}
                   >
                     {selectMode && (
                       <input type="checkbox" checked={checked} readOnly className="pointer-events-none shrink-0" />
                     )}
+                    <PartnerMiniAvatar partner={r} />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5">
                         <span className="truncate font-semibold text-neutral-800">{r.name}</span>
@@ -384,6 +444,9 @@ export function PartnersClient({
                           <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] ${toneClass(catColor[r.category])}`}>
                             {catLabel[r.category] ?? r.category}
                           </span>
+                        )}
+                        {!r.is_active && (
+                          <span className="shrink-0 rounded-full bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-500">종료</span>
                         )}
                         {selectMode && (
                           <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${r.company_id ? "bg-teal-100 text-teal-700" : "bg-amber-100 text-amber-700"}`}>
@@ -432,16 +495,20 @@ export function PartnersClient({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* 헤더 카드 */}
-            <div className="rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 p-6 text-white shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
+            {/* 헤더 카드 — 사진 + 정보. 진행중=틸, 종료=그레이 */}
+            <div className={`rounded-2xl p-6 text-white shadow-sm ${selected.is_active ? "bg-gradient-to-br from-teal-500 to-emerald-500" : "bg-gradient-to-br from-neutral-500 to-neutral-600"}`}>
+              <div className="flex flex-wrap items-center gap-5">
+                <PartnerAvatarUpload partner={selected} onChanged={() => router.refresh()} />
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-xl font-bold">{selected.name}</h2>
                     {selected.category && (
                       <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
                         {catLabel[selected.category] ?? selected.category}
                       </span>
+                    )}
+                    {!selected.is_active && (
+                      <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-medium">🚫 거래종료</span>
                     )}
                   </div>
                   <p className="mt-0.5 text-sm text-white/70">{companyName(selected.company_id)}</p>
@@ -460,6 +527,23 @@ export function PartnersClient({
                   </button>
                   <button
                     onClick={() => {
+                      const ending = selected.is_active;
+                      if (
+                        !confirm(
+                          ending
+                            ? `${selected.name} 거래처를 '종료' 처리할까요?\n신규 거래·계약·알림 대상에서 제외됩니다. (목록·거래이력은 유지, 언제든 재개 가능)`
+                            : `${selected.name} 거래처를 다시 '진행중'으로 되돌릴까요?`
+                        )
+                      )
+                        return;
+                      void updateRow("partners", selected.id, { is_active: !ending }).then(() => router.refresh());
+                    }}
+                    className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30"
+                  >
+                    {selected.is_active ? "🚫 거래종료" : "♻ 거래재개"}
+                  </button>
+                  <button
+                    onClick={() => {
                       if (!confirm(`${selected.name} 거래처를 삭제할까요?`)) return;
                       void deleteRow("partners", selected.id).then(() => router.push("/partners"));
                     }}
@@ -474,28 +558,55 @@ export function PartnersClient({
             {/* KPI (거래 실적 360°) */}
             <CrmKpis transactions={transactions} />
 
-            {/* 탭 */}
-            <div className="flex flex-wrap gap-1 border-b border-neutral-200">
-              {([
-                ["txn", `📊 거래내역 ${transactions.length}`],
-                ["contract", `📑 계약 ${contracts.length}`],
-                ["settle", `🧾 정산 ${settlements.length}`],
-                ["files", `📎 문서함 ${attachments.length}`],
-                ["info", "🧾 기본정보"],
-                ["ledger", `📒 거래원장 ${entries.length}`],
-                ["payback", `💸 페이백 ${paybacks.length}`],
-              ] as const).map(([k, label]) => (
-                <button
-                  key={k}
-                  onClick={() => setTab(k)}
-                  className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
-                    tab === k ? "border-neutral-900 text-neutral-900" : "border-transparent text-neutral-500 hover:text-neutral-800"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {/* 탭 (순서 변경 가능) */}
+            {(() => {
+              const tabLabel: Record<PartnerTab, string> = {
+                txn: `📊 거래내역 ${transactions.length}`,
+                contract: `📑 계약 ${contracts.length}`,
+                settle: `🧾 정산 ${settlements.length}`,
+                files: `📎 문서함 ${attachments.length}`,
+                info: "🧾 기본정보",
+                memo: `📝 메모 ${memos.length}`,
+                ledger: `📒 거래원장 ${entries.length}`,
+                payback: `💸 페이백 ${paybacks.length}`,
+              };
+              return (
+                <div className="flex flex-wrap items-center gap-1 border-b border-neutral-200">
+                  {tabOrder.map((k) => (
+                    <button
+                      key={k}
+                      onClick={() => setTab(k)}
+                      className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+                        tab === k ? "border-neutral-900 text-neutral-900" : "border-transparent text-neutral-500 hover:text-neutral-800"
+                      }`}
+                    >
+                      {tabLabel[k]}
+                    </button>
+                  ))}
+                  {/* 순서 변경 아이콘 — 오른쪽 끝 */}
+                  <div className="relative ml-auto">
+                    <button
+                      onClick={() => setTabMenuOpen((v) => !v)}
+                      title="탭 순서 변경"
+                      className={`-mb-px rounded-md px-2 py-2 text-base leading-none ${tabMenuOpen ? "text-neutral-800" : "text-neutral-400 hover:text-neutral-700"}`}
+                    >
+                      ⇅
+                    </button>
+                    {tabMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setTabMenuOpen(false)} />
+                        <TabReorderMenu
+                          order={tabOrder}
+                          labels={tabLabel}
+                          onReorder={persistTabOrder}
+                          onReset={() => persistTabOrder(DEFAULT_TAB_ORDER)}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
 
             {tab === "txn" ? (
               <TransactionsTab
@@ -529,50 +640,69 @@ export function PartnersClient({
                 onChanged={() => router.refresh()}
               />
             ) : tab === "info" ? (
-              <section className="rounded-2xl border border-neutral-200 bg-white">
-                <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
-                  <h3 className="font-semibold text-neutral-800">🧾 기본 정보</h3>
-                  <button onClick={() => setEditOpen(true)} className="rounded-lg border border-neutral-300 px-3 py-1 text-xs hover:bg-neutral-50">
-                    수정
-                  </button>
-                </div>
-                <dl className="divide-y divide-neutral-50 px-5 py-1 text-sm">
-                  <Row label="상호">{selected.name}</Row>
-                  <Row label="구분">
-                    <InlineSelect
-                      kind="partners"
-                      id={selected.id}
-                      field="category"
-                      value={selected.category ?? ""}
-                      placeholder="미지정"
-                      options={withCurrent(catSel, selected.category ?? "")}
-                      tone={selected.category ? toneClass(catColor[selected.category]) : undefined}
-                    />
-                  </Row>
-                  <Row label="사업자번호">{selected.biz_no || "-"}</Row>
-                  <Row label="담당자">{selected.contact_name || "-"}</Row>
-                  <Row label="연락처">{selected.phone || "-"}</Row>
-                  <Row label="이메일">{selected.email || "-"}</Row>
-                  <Row label="소속">
-                    <InlineSelect
-                      kind="partners"
-                      id={selected.id}
-                      field="company_id"
-                      value={selected.company_id ?? ""}
-                      placeholder="공용"
-                      options={ctx.companies.map((c) => ({ value: c.id, label: c.name }))}
-                      tone={selected.company_id ? toneClass("teal") : toneClass("blue")}
-                    />
-                  </Row>
-                  <Row label="기본 계정과목">
-                    {selected.default_account_id ? accountLabel.get(selected.default_account_id) ?? "-" : "-"}
-                  </Row>
-                  <Row label="기본 부가세율">
-                    {selected.default_tax_rate != null ? `${selected.default_tax_rate}%` : "10% (기본)"}
-                  </Row>
-                  <Row label="메모">{selected.memo || "-"}</Row>
-                </dl>
-              </section>
+              <div className="space-y-4">
+                {/* 📍 기본 정보 */}
+                <InfoSection icon="📍" title="기본 정보" onEdit={() => setEditOpen(true)}>
+                  <InfoRow label="상호">{selected.name || "-"}</InfoRow>
+                  <InfoRow label="구분">{selected.category ? catLabel[selected.category] ?? selected.category : "-"}</InfoRow>
+                  <InfoRow label="지역·그룹">{selected.partner_group || "-"}</InfoRow>
+                  <InfoRow label="대표자">{selected.rep_name || "-"}</InfoRow>
+                  <InfoRow label="사업자번호">{selected.biz_no || "-"}</InfoRow>
+                  <InfoRow label="연락처">{selected.phone || "-"}</InfoRow>
+                  <InfoRow label="이메일">{selected.email || "-"}</InfoRow>
+                  <InfoRow label="소속">{companyName(selected.company_id)}</InfoRow>
+                  <InfoRow label="주소">
+                    {selected.address ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span>{[selected.address, selected.address_detail].filter(Boolean).join(" ")}</span>
+                        <a
+                          href={`https://map.naver.com/p/search/${encodeURIComponent(selected.address)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="shrink-0 whitespace-nowrap text-xs font-medium text-teal-600 hover:underline"
+                        >
+                          🗺 지도
+                        </a>
+                      </span>
+                    ) : (
+                      "-"
+                    )}
+                  </InfoRow>
+                </InfoSection>
+
+                {/* 🏢 시설 정보 */}
+                <InfoSection icon="🏢" title="시설 정보" hint="장소·기관 거래처용" onEdit={() => setEditOpen(true)}>
+                  <InfoRow label="담당자">{selected.contact_name || "-"}</InfoRow>
+                  <InfoRow label="직급">{selected.contact_title || "-"}</InfoRow>
+                  <InfoRow label="주차대수">{selected.parking_count != null ? `${selected.parking_count.toLocaleString("ko-KR")}대` : "-"}</InfoRow>
+                  <InfoRow label="최대 수용인원">{selected.max_capacity != null ? `${selected.max_capacity.toLocaleString("ko-KR")}명` : "-"}</InfoRow>
+                  <InfoRow label="적정 인원">{selected.ideal_capacity != null ? `${selected.ideal_capacity.toLocaleString("ko-KR")}명` : "-"}</InfoRow>
+                  <InfoRow label="이용료">{selected.usage_fee != null ? krw(selected.usage_fee) : "-"}</InfoRow>
+                  <InfoRow label="비고">{selected.facility_note || "-"}</InfoRow>
+                </InfoSection>
+
+                {/* 🏦 사업자·결제 정보 */}
+                <InfoSection icon="🏦" title="사업자·결제 정보" onEdit={() => setEditOpen(true)}>
+                  <InfoRow label="업태">{selected.biz_type || "-"}</InfoRow>
+                  <InfoRow label="종목">{selected.biz_item || "-"}</InfoRow>
+                  <InfoRow label="과세 유형">{selected.tax_category ? TAX_CATEGORY_LABEL[selected.tax_category] ?? selected.tax_category : "-"}</InfoRow>
+                  <InfoRow label="거래처 구분">{selected.partner_kind ? PARTNER_KIND_LABEL[selected.partner_kind] ?? selected.partner_kind : "-"}</InfoRow>
+                  <InfoRow label="결제 조건">{selected.payment_terms ? PAYMENT_TERMS_LABEL[selected.payment_terms] ?? selected.payment_terms : "-"}</InfoRow>
+                  <InfoRow label="결제 주기">{selected.payment_cycle ? PAYMENT_CYCLE_LABEL[selected.payment_cycle] ?? selected.payment_cycle : "-"}</InfoRow>
+                  <InfoRow label="증빙 발행">{selected.evidence_type ? EVIDENCE_TYPE_LABEL[selected.evidence_type] ?? selected.evidence_type : "-"}</InfoRow>
+                  <InfoRow label="여신 한도">{selected.credit_limit != null ? krw(selected.credit_limit) : "-"}</InfoRow>
+                  <InfoRow label="거래 은행">{selected.bank_name || "-"}</InfoRow>
+                  <InfoRow label="계좌번호">{selected.account_no || "-"}</InfoRow>
+                  <InfoRow label="예금주">{selected.account_holder || "-"}</InfoRow>
+                  <InfoRow label="세금계산서 이메일">{selected.tax_email || "-"}</InfoRow>
+                  <InfoRow label="영업담당">{employees.find((e) => e.id === selected.sales_rep_id)?.name || "-"}</InfoRow>
+                  <InfoRow label="기본 계정과목">{selected.default_account_id ? accountLabel.get(selected.default_account_id) ?? "-" : "-"}</InfoRow>
+                  <InfoRow label="기본 부가세율">{selected.default_tax_rate != null ? `${selected.default_tax_rate}%` : "10% (기본)"}</InfoRow>
+                  <InfoRow label="팝빌 CorpNum">{selected.popbill_corpnum || "-"}</InfoRow>
+                </InfoSection>
+              </div>
+            ) : tab === "memo" ? (
+              <PartnerMemoTab partnerId={selected.id} memos={memos} onChanged={() => router.refresh()} />
             ) : tab === "payback" ? (
               <PaybackList rows={paybacks} />
             ) : (
@@ -834,11 +964,317 @@ function HeaderField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
+// 거래처 사진(로고) 업로드 — 클릭·드래그·붙여넣기, 256px로 리사이즈해 photo_url(data URL) 저장. 직원 아바타와 동일 방식(버킷 미사용).
+function PartnerAvatarUpload({ partner, onChanged }: { partner: PartnerRow; onChanged: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, startTransition] = useTransition();
+  const [drag, setDrag] = useState(false);
+
+  function resizeAndSave(file: File) {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        const max = 256;
+        let w = img.width;
+        let h = img.height;
+        if (w > h && w > max) {
+          h = Math.round((h * max) / w);
+          w = max;
+        } else if (h > max) {
+          w = Math.round((w * max) / h);
+          h = max;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const cx = canvas.getContext("2d");
+        if (!cx) return;
+        cx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        startTransition(async () => {
+          await updateRow("partners", partner.id, { photo_url: dataUrl });
+          onChanged();
+        });
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const it of items) {
+        const type = it.types.find((t) => t.startsWith("image/"));
+        if (type) {
+          const blob = await it.getType(type);
+          resizeAndSave(new File([blob], "paste.png", { type }));
+          return;
+        }
+      }
+      alert("클립보드에 이미지가 없습니다.");
+    } catch {
+      alert("붙여넣기를 사용할 수 없습니다. 클릭하거나 드래그로 올려주세요.");
+    }
+  }
+
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5">
+    <div className="flex flex-col items-center gap-1">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) resizeAndSave(f);
+          e.target.value = "";
+        }}
+      />
+      <div
+        onClick={() => fileRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDrag(true);
+        }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDrag(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) resizeAndSave(f);
+        }}
+        title="클릭 또는 드래그해서 사진 업로드"
+        className={`group/av relative h-28 w-28 shrink-0 cursor-pointer overflow-hidden rounded-3xl shadow-lg ring-4 ring-white/40 ${
+          drag ? "opacity-70 ring-white" : ""
+        }`}
+      >
+        {partner.photo_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={partner.photo_url} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-white/90 text-4xl font-bold text-neutral-400">
+            {partner.name?.[0] ?? "?"}
+          </div>
+        )}
+        <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-center text-[10px] leading-tight text-white opacity-0 transition group-hover/av:opacity-100">
+          {pending ? "저장중…" : "클릭·드래그"}
+        </span>
+      </div>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={pasteFromClipboard}
+          className="rounded-md bg-white/20 px-2 py-0.5 text-[11px] text-white hover:bg-white/30"
+        >
+          📋 붙여넣기
+        </button>
+        {partner.photo_url && (
+          <button
+            onClick={() =>
+              startTransition(async () => {
+                await updateRow("partners", partner.id, { photo_url: null });
+                onChanged();
+              })
+            }
+            className="rounded-md px-1 py-0.5 text-[11px] text-white/70 hover:text-white"
+          >
+            삭제
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 목록 행 아바타(사진 or 이니셜) — 작게
+function PartnerMiniAvatar({ partner }: { partner: PartnerRow }) {
+  if (partner.photo_url)
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={partner.photo_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />;
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-bold text-neutral-500">
+      {partner.name?.[0] ?? "?"}
+    </span>
+  );
+}
+
+// 기본정보 탭 섹션 카드(제목 + 수정버튼 + 2열 필드 그리드)
+function InfoSection({
+  icon,
+  title,
+  hint,
+  onEdit,
+  children,
+}: {
+  icon: string;
+  title: string;
+  hint?: string;
+  onEdit?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+      <div className="flex items-center justify-between border-b border-neutral-100 bg-neutral-50/60 px-5 py-3">
+        <h3 className="flex items-center gap-2 font-semibold text-neutral-800">
+          <span>{icon}</span>
+          <span>{title}</span>
+          {hint && <span className="text-xs font-normal text-neutral-400">{hint}</span>}
+        </h3>
+        {onEdit && (
+          <button onClick={onEdit} className="shrink-0 rounded-lg border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50">
+            ✏️ 수정
+          </button>
+        )}
+      </div>
+      <dl className="grid grid-cols-1 gap-x-10 px-5 py-1 sm:grid-cols-2">{children}</dl>
+    </section>
+  );
+}
+
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-neutral-50 py-2.5 text-sm">
       <dt className="shrink-0 text-neutral-400">{label}</dt>
-      <dd className="text-right font-medium text-neutral-800">{children}</dd>
+      <dd className="min-w-0 break-words text-right font-medium text-neutral-800">{children}</dd>
+    </div>
+  );
+}
+
+// 거래처 메모 로그 탭 — 직원 메모처럼 누적(작성자·시각 기록)
+function PartnerMemoTab({ partnerId, memos, onChanged }: { partnerId: string; memos: PartnerMemoRow[]; onChanged: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [memo, setMemo] = useState("");
+
+  function save() {
+    const text = memo.trim();
+    if (!text) return;
+    startTransition(async () => {
+      const r = await addPartnerMemo(partnerId, text);
+      if (!r.ok) {
+        alert(r.error);
+        return;
+      }
+      setMemo("");
+      onChanged();
+    });
+  }
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white">
+      <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
+        <h3 className="font-semibold text-neutral-800">
+          📝 메모 <span className="ml-1 text-xs font-normal text-neutral-400">{memos.length}건</span>
+        </h3>
+      </div>
+      <div className="space-y-3 p-5">
+        {/* 새 메모 입력 → 누적 기록 */}
+        <div className="space-y-2">
+          <textarea
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") save();
+            }}
+            rows={3}
+            placeholder="메모를 입력하면 시각·작성자와 함께 계속 기록됩니다… (Ctrl+Enter로 저장)"
+            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
+          />
+          <div className="text-right">
+            <button
+              onClick={save}
+              disabled={pending || !memo.trim()}
+              className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400 disabled:opacity-40"
+            >
+              기록 추가
+            </button>
+          </div>
+        </div>
+
+        {/* 누적 메모 로그(최신순) */}
+        {memos.length === 0 ? (
+          <p className="py-6 text-center text-sm text-neutral-400">기록된 메모가 없습니다.</p>
+        ) : (
+          <ul className="space-y-2">
+            {memos.map((m) => (
+              <li key={m.id} className="group rounded-xl border border-neutral-100 bg-neutral-50/60 px-3.5 py-2.5">
+                <div className="mb-1 flex items-center gap-2 text-[11px] text-neutral-400">
+                  <span className="font-medium text-neutral-500">{m.author_name ?? "작성자"}</span>
+                  <span className="tabular-nums">{m.created_at.slice(0, 16).replace("T", " ")}</span>
+                  <button
+                    onClick={() => {
+                      if (confirm("이 메모를 삭제할까요?")) startTransition(async () => { await deletePartnerMemo(m.id); onChanged(); });
+                    }}
+                    className="ml-auto text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 hover:text-rose-500"
+                  >
+                    🗑
+                  </button>
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-neutral-700">{m.body}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// 탭 순서 변경 팝오버 — 드래그 또는 ▲▼
+function TabReorderMenu({
+  order,
+  labels,
+  onReorder,
+  onReset,
+}: {
+  order: PartnerTab[];
+  labels: Record<PartnerTab, string>;
+  onReorder: (next: PartnerTab[]) => void;
+  onReset: () => void;
+}) {
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  function drop(target: number) {
+    if (dragIdx === null || dragIdx === target) { setDragIdx(null); return; }
+    const next = order.slice();
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(target, 0, moved);
+    onReorder(next);
+    setDragIdx(null);
+  }
+  function move(i: number, dir: -1 | 1) {
+    const j = i + dir;
+    if (j < 0 || j >= order.length) return;
+    const next = order.slice();
+    [next[i], next[j]] = [next[j], next[i]];
+    onReorder(next);
+  }
+  return (
+    <div className="absolute right-0 top-full z-40 mt-1 w-60 rounded-xl border border-neutral-200 bg-white p-2 shadow-lg">
+      <div className="mb-1 flex items-center justify-between px-1">
+        <span className="text-xs font-semibold text-neutral-500">탭 순서 변경 · 드래그</span>
+        <button onClick={onReset} className="text-[11px] text-neutral-400 hover:text-neutral-700">초기화</button>
+      </div>
+      <ul className="space-y-0.5">
+        {order.map((k, i) => (
+          <li
+            key={k}
+            draggable
+            onDragStart={() => setDragIdx(i)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => drop(i)}
+            onDragEnd={() => setDragIdx(null)}
+            className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm ${
+              dragIdx === i ? "border-dashed border-neutral-300 bg-neutral-50 opacity-60" : "border-transparent hover:bg-neutral-50"
+            }`}
+          >
+            <span className="cursor-grab select-none text-neutral-300 active:cursor-grabbing">⋮⋮</span>
+            <span className="flex-1 truncate">{labels[k]}</span>
+            <button onClick={() => move(i, -1)} disabled={i === 0} className="rounded px-1 text-xs text-neutral-400 hover:bg-neutral-100 disabled:opacity-30">▲</button>
+            <button onClick={() => move(i, 1)} disabled={i === order.length - 1} className="rounded px-1 text-xs text-neutral-400 hover:bg-neutral-100 disabled:opacity-30">▼</button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -918,6 +1354,13 @@ function PartnerEditModal({
     sales_rep_id: partner?.sales_rep_id ?? "",
     partner_group: partner?.partner_group ?? "",
     popbill_corpnum: partner?.popbill_corpnum ?? "",
+    // 시설 정보
+    contact_title: partner?.contact_title ?? "",
+    parking_count: partner?.parking_count?.toString() ?? "",
+    max_capacity: partner?.max_capacity?.toString() ?? "",
+    ideal_capacity: partner?.ideal_capacity?.toString() ?? "",
+    usage_fee: partner?.usage_fee?.toString() ?? "",
+    facility_note: partner?.facility_note ?? "",
   });
 
   function save() {
@@ -956,6 +1399,13 @@ function PartnerEditModal({
       sales_rep_id: d.sales_rep_id || null,
       partner_group: d.partner_group.trim() || null,
       popbill_corpnum: d.popbill_corpnum.trim() || null,
+      contact_title: d.contact_title.trim() || null,
+      // 정수 컬럼 — 소수 입력해도 반올림해 정수로 저장(DB 타입오류 방지)
+      parking_count: d.parking_count.trim() === "" ? null : Math.round(Number(d.parking_count.replace(/[^\d.-]/g, ""))),
+      max_capacity: d.max_capacity.trim() === "" ? null : Math.round(Number(d.max_capacity.replace(/[^\d.-]/g, ""))),
+      ideal_capacity: d.ideal_capacity.trim() === "" ? null : Math.round(Number(d.ideal_capacity.replace(/[^\d.-]/g, ""))),
+      usage_fee: d.usage_fee.trim() === "" ? null : Number(d.usage_fee.replace(/[^\d.-]/g, "")),
+      facility_note: d.facility_note.trim() || null,
     };
     startTransition(async () => {
       const res = partner ? await updateRow("partners", partner.id, value) : await createRow("partners", value);
@@ -1037,8 +1487,19 @@ function PartnerEditModal({
           </Field>
         </FormSection>
 
-        {/* 5. 결제·금융 */}
-        <FormSection no={5} title="결제 · 금융" desc="정산·증빙 기준(선택)">
+        {/* 5. 시설 정보 */}
+        <FormSection no={5} title="시설 정보" desc="장소·기관 거래처용(선택)">
+          <Field label="담당자 직급"><TextInput value={d.contact_title} onChange={(e) => setD({ ...d, contact_title: e.target.value })} placeholder="예: 원장·팀장" /></Field>
+          <Field label="이용료(원)"><NumberInput value={d.usage_fee} onChange={(v) => setD({ ...d, usage_fee: v })} placeholder="대관·이용료" /></Field>
+          <Field label="주차대수"><NumberInput value={d.parking_count} onChange={(v) => setD({ ...d, parking_count: v })} placeholder="대" /></Field>
+          <Field label="최대 수용인원"><NumberInput value={d.max_capacity} onChange={(v) => setD({ ...d, max_capacity: v })} placeholder="명" /></Field>
+          <Field label="적정 인원"><NumberInput value={d.ideal_capacity} onChange={(v) => setD({ ...d, ideal_capacity: v })} placeholder="명" /></Field>
+          <div />
+          <div className="col-span-2"><Field label="시설 비고"><TextInput value={d.facility_note} onChange={(e) => setD({ ...d, facility_note: e.target.value })} placeholder="시설 특이사항" /></Field></div>
+        </FormSection>
+
+        {/* 6. 결제·금융 */}
+        <FormSection no={6} title="결제 · 금융" desc="정산·증빙 기준(선택)">
           <Field label="결제 조건">
             <SelectInput value={d.payment_terms} onChange={(e) => setD({ ...d, payment_terms: e.target.value })}>
               <option value="">미지정</option>
@@ -1064,8 +1525,8 @@ function PartnerEditModal({
           <Field label="그룹/지역"><TextInput value={d.partner_group} onChange={(e) => setD({ ...d, partner_group: e.target.value })} placeholder="필터용" /></Field>
         </FormSection>
 
-        {/* 6. 메모 */}
-        <FormSection no={6} title="메모">
+        {/* 7. 메모 */}
+        <FormSection no={7} title="메모">
           <div className="col-span-2">
             <textarea
               value={d.memo}

@@ -377,6 +377,34 @@ export async function deletePartnerFile(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/** 거래처 메모 로그 추가(누적). 작성자·시각 기록. */
+export async function addPartnerMemo(partnerId: string, body: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const text = body.trim();
+  if (!text) return { ok: false, error: "메모를 입력하세요" };
+  const db = createAdminClient();
+  const { error } = await db.from("partner_memos").insert({
+    partner_id: partnerId,
+    body: text,
+    author_id: g.profile!.id,
+    author_name: g.profile!.username ?? g.profile!.email ?? "관리자",
+  } as never);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/partners");
+  return { ok: true };
+}
+
+export async function deletePartnerMemo(id: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const { error } = await db.from("partner_memos").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/partners");
+  return { ok: true };
+}
+
 /** 정산 → 매출 세금계산서 생성·연결(수기). 팝빌 전 단계. */
 export async function createTaxInvoiceFromSettlement(settlementId: string): Promise<Result> {
   const g = await ensureUser();

@@ -20,9 +20,11 @@ const biz = (v: unknown) => (v ? normalizeBizNo(String(v)) : null);
 const clean = (parts: (string | null)[], sep = " / ") =>
   parts.map((p) => (p ?? "").toString().trim()).filter(Boolean).join(sep) || null;
 
-/** 소스 한 행 → 거래처 행 매핑 (종류별) */
+/** 소스 한 행 → 거래처 행 매핑 (종류별)
+ *  ⚠️ is_active·company_id 는 payload에서 제외 — upsert(onConflict=source_ref)가 기존 행의
+ *  '종료' 상태·사업자 배정을 덮어쓰지 않도록. (신규 삽입 시엔 DB 기본값: is_active=true, company_id=NULL) */
 function mapRow(kind: SyncKind, r: Row): Row {
-  const base = { category: kind, company_id: null, is_active: true, source_ref: "" };
+  const base = { category: kind, source_ref: "" };
   if (kind === "협력사") {
     return {
       ...base,

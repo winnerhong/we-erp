@@ -90,6 +90,24 @@ export interface PartnerRow extends Timestamps {
   partner_group: string | null;
   credit_grade: string | null;
   popbill_corpnum: string | null;
+  photo_url: string | null;         // 거래처 사진(로고) — data URL 저장(20260725)
+  // 시설 정보(20260726) — 장소/기관 거래처용
+  contact_title: string | null;     // 담당자 직급
+  parking_count: number | null;     // 주차대수
+  max_capacity: number | null;      // 최대 수용인원
+  ideal_capacity: number | null;    // 적정 인원
+  usage_fee: number | null;         // 이용료(원)
+  facility_note: string | null;     // 시설 비고
+}
+
+// 거래처 메모 로그(20260726) — 덮어쓰기 대신 누적
+export interface PartnerMemoRow {
+  id: string;
+  partner_id: string;
+  body: string;
+  author_id: string | null;
+  author_name: string | null;
+  created_at: string;
 }
 
 // ---------------- 거래처 CRM: 계약 / 거래내역 ----------------
@@ -472,6 +490,20 @@ export interface BankTransactionRow extends Timestamps {
   payroll_id: string | null; // 자동 생성/연결된 급여(payrolls.id)
   settles_card_id: string | null; // 카드대금 정산: 이 출금이 결제하는 카드(cards.id)
   settles_month: string | null; // 카드대금 정산: 대상 카드 사용월 'YYYY-MM'
+  group_id: string | null; // 정기거래 그룹(bank_txn_groups.id)
+}
+
+// 통장 정기거래 그룹(20260727)
+export interface BankTxnGroupRow extends Timestamps {
+  id: string;
+  company_id: string;
+  name: string;
+  match_keys: string[];              // 자동 매칭 키워드(정규화)
+  direction: string | null;         // 'IN' | 'OUT' | null
+  default_partner_id: string | null;
+  default_account_id: string | null;
+  default_category: string | null;
+  color: string | null;
 }
 
 export interface PaybackRow {
@@ -759,6 +791,7 @@ export interface Database {
         BankTransactionRow,
         "bank_account_id" | "company_id" | "txn_date" | "direction"
       >;
+      bank_txn_groups: TableShape<BankTxnGroupRow, "company_id" | "name">;
       cards: TableShape<CardRow, "company_id" | "alias">;
       card_transactions: TableShape<
         CardTransactionRow,
@@ -778,6 +811,7 @@ export interface Database {
       asset_movements: TableShape<AssetMovementRow, "asset_id" | "type" | "txn_date">;
       event_staff: TableShape<EventStaffRow, "contract_id">;
       partner_attachments: TableShape<PartnerAttachmentRow, "partner_id" | "title" | "file_name" | "storage_path">;
+      partner_memos: TableShape<PartnerMemoRow, "partner_id" | "body">;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
