@@ -47,6 +47,8 @@ import {
   deleteEvent,
   addEmployeeMemo,
   deleteEmployeeMemo,
+  resignEmployee,
+  reinstateEmployee,
 } from "@/app/(erp)/hr/actions";
 import {
   importTeachersFromWks,
@@ -212,7 +214,9 @@ export function EmployeesClient({
   const [addOpen, setAddOpen] = useState(false);
   const [acctFor, setAcctFor] = useState<EmployeeRow | null>(null);
   const [editFor, setEditFor] = useState<EmployeeRow | null>(null);
+  const [resignFor, setResignFor] = useState<EmployeeRow | null>(null);
   const [search, setSearch] = useState("");
+  const [seg, setSeg] = useState<"active" | "resigned" | "all">("active");
   const TAB_KEYS: TabKey[] = ["info", "card", "work", "pay", "payback", "leave", "docs", "history"];
   const [tab, setTab] = useState<TabKey>(
     initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as TabKey) : "info"
@@ -241,16 +245,22 @@ export function EmployeesClient({
   const statusColor = colorOf("employee_status");
   const empColor = colorOf("employment_type");
 
+  // 재직/퇴사 구분: 퇴사·계약종료 = 퇴사자, 그 외(재직·휴직·미지정) = 근무중
+  const isResigned = (r: EmployeeRow) => r.status === "퇴사" || r.status === "계약종료";
+  const workingCount = rows.filter((r) => !isResigned(r)).length;
+  const resignedCount = rows.filter((r) => isResigned(r)).length;
+
   const q = search.trim().toLowerCase();
-  const filtered = rows.filter((r) =>
-    !q
-      ? true
-      : `${r.name} ${r.nickname ?? ""} ${r.phone ?? ""} ${accounts[r.id]?.username ?? ""} ${
-          companyName.get(r.company_id ?? "") ?? ""
-        }`
-          .toLowerCase()
-          .includes(q)
-  );
+  const filtered = rows.filter((r) => {
+    if (seg === "active" && isResigned(r)) return false;
+    if (seg === "resigned" && !isResigned(r)) return false;
+    if (!q) return true;
+    return `${r.name} ${r.nickname ?? ""} ${r.phone ?? ""} ${accounts[r.id]?.username ?? ""} ${
+      companyName.get(r.company_id ?? "") ?? ""
+    }`
+      .toLowerCase()
+      .includes(q);
+  });
   const selected = rows.find((r) => r.id === selectedId) ?? filtered[0] ?? rows[0] ?? null;
 
   const refresh = () => router.refresh();
@@ -337,7 +347,24 @@ export function EmployeesClient({
               placeholder="🔍 이름·닉네임·연락처·아이디"
               className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none"
             />
-            <p className="mt-2 px-1 text-xs text-neutral-400">직원 {filtered.length}명</p>
+            <div className="mt-2 flex gap-1">
+              {([
+                ["active", "근무중", workingCount],
+                ["resigned", "퇴사", resignedCount],
+                ["all", "전체", rows.length],
+              ] as const).map(([k, label, n]) => (
+                <button
+                  key={k}
+                  onClick={() => setSeg(k)}
+                  className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                    seg === k ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+                  }`}
+                >
+                  {label} <span className={seg === k ? "text-neutral-300" : "text-neutral-400"}>{n}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 px-1 text-xs text-neutral-400">{filtered.length}명 표시</p>
           </div>
           <div className="max-h-[70vh] divide-y divide-neutral-100 overflow-y-auto">
             {filtered.length === 0 ? (
@@ -352,7 +379,7 @@ export function EmployeesClient({
                     onClick={() => setSelectedId(r.id)}
                     className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition ${
                       on ? "bg-indigo-50" : "hover:bg-neutral-50"
-                    }`}
+                    } ${isResigned(r) ? "opacity-55" : ""}`}
                   >
                     <Avatar emp={r} size={9} />
                     <span className="min-w-0 flex-1">
@@ -402,6 +429,12 @@ export function EmployeesClient({
                     {companyName.get(selected.company_id ?? "") ?? "미배정"} ·{" "}
                     {empLabel[selected.employment_type] ?? selected.employment_type}
                   </p>
+                  {isResigned(selected) && (
+                    <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-rose-500/30 px-2.5 py-0.5 text-xs font-medium text-rose-50">
+                      🚪 퇴사 {selected.resigned_on ?? "-"}
+                      {selected.resign_reason ? ` · ${selected.resign_reason}` : ""}
+                    </p>
+                  )}
                   <div className="mt-5 grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
                     <HeaderField label="연락처" value={selected.phone || "-"} />
                     <HeaderField label="아이디" value={accounts[selected.id]?.username || "미발급"} />
@@ -415,7 +448,10 @@ export function EmployeesClient({
                           : krw(selected.base_salary)
                       }
                     />
-                    <HeaderField label="입사일" value={selected.hired_on || "-"} />
+                    <HeaderField
+                      label={isResigned(selected) ? "재직기간" : "입사·근속"}
+                      value={selected.hired_on ? `${selected.hired_on}${tenure(selected.hired_on, selected.resigned_on) ? ` · ${tenure(selected.hired_on, selected.resigned_on)}` : ""}` : "-"}
+                    />
                   </div>
                 </div>
               </div>
@@ -442,6 +478,18 @@ export function EmployeesClient({
                   >
                     👤 직원 로그인(새 탭)
                   </HeaderBtn>
+                )}
+                {isResigned(selected) ? (
+                  <HeaderBtn
+                    onClick={() => {
+                      if (!confirm(`${selected.name} 님을 복직/재입사 처리할까요? (재직 복귀 + 퇴사정보 해제)`)) return;
+                      void reinstateEmployee(selected.id).then((r) => { if (r?.error) alert(r.error); else refresh(); });
+                    }}
+                  >
+                    ↩ 복직/재입사
+                  </HeaderBtn>
+                ) : (
+                  <HeaderBtn onClick={() => setResignFor(selected)}>🚪 퇴사 처리</HeaderBtn>
                 )}
                 <HeaderBtn
                   danger
@@ -617,6 +665,56 @@ export function EmployeesClient({
           }}
         />
       )}
+      {resignFor && (
+        <ResignModal
+          employee={resignFor}
+          onClose={() => setResignFor(null)}
+          onSaved={() => { setResignFor(null); refresh(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------- 퇴사 처리 모달 ----------
+function ResignModal({ employee, onClose, onSaved }: { employee: EmployeeRow; onClose: () => void; onSaved: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [reason, setReason] = useState("");
+
+  function submit() {
+    startTransition(async () => {
+      const r = await resignEmployee(employee.id, date || null, reason || null);
+      if (!r.ok) { alert(r.error ?? "처리 실패"); return; }
+      onSaved();
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
+          <h3 className="font-semibold text-neutral-800">🚪 퇴사 처리 — {employee.name}</h3>
+          <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">✕</button>
+        </div>
+        <div className="space-y-3 p-5">
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+            퇴사 처리하면 <b>상태=퇴사</b>, <b>비활성</b>으로 바뀌어 근태·급여·직원 드롭다운·수업배정 등 운영 대상에서 제외되고, 인사이력에 자동 기록됩니다. (복직 버튼으로 되돌릴 수 있음)
+          </p>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">퇴사일</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-neutral-500">퇴사 사유</span>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="자진퇴사 / 계약만료 / 권고사직 등" className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none" />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-neutral-100 px-5 py-3">
+          <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">취소</button>
+          <button onClick={submit} disabled={pending} className="rounded-lg bg-rose-600 px-5 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-50">{pending ? "처리 중…" : "퇴사 처리"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -985,6 +1083,20 @@ function Avatar({ emp, size, ring }: { emp: EmployeeRow; size: number; ring?: bo
       {emp.name?.[0] ?? "?"}
     </div>
   );
+}
+
+/** 근속기간(입사~퇴사 또는 현재) → "N년 M개월". */
+function tenure(from: string | null, to: string | null): string {
+  if (!from) return "";
+  const start = new Date(`${from}T00:00:00`);
+  const end = to ? new Date(`${to}T00:00:00`) : new Date();
+  if (isNaN(start.getTime())) return "";
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  if (end.getDate() < start.getDate()) months--;
+  if (months < 0) return "";
+  const y = Math.floor(months / 12);
+  const m = months % 12;
+  return `${y > 0 ? `${y}년 ` : ""}${m}개월`;
 }
 
 function HeaderField({ label, value }: { label: string; value: string }) {

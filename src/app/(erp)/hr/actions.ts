@@ -313,6 +313,50 @@ export async function deleteEvent(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/** 퇴사 처리 — 상태·비활성·퇴사일·사유 저장 + 인사이력 자동 기록. */
+export async function resignEmployee(employeeId: string, resignedOn: string | null, reason: string | null): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const date = resignedOn || new Date().toISOString().slice(0, 10);
+  const { error } = await db.from("employees").update({
+    status: "퇴사",
+    is_active: false,
+    resigned_on: date,
+    resign_reason: reason?.trim() || null,
+  } as never).eq("id", employeeId);
+  if (error) return { ok: false, error: error.message };
+  await db.from("employee_events").insert({
+    employee_id: employeeId, event_date: date, event_type: "퇴사",
+    title: "퇴사 처리", detail: reason?.trim() || null,
+  } as never);
+  revalidatePath("/employees");
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** 복직/재입사 — 재직 복귀 + 퇴사정보 해제 + 인사이력 기록. */
+export async function reinstateEmployee(employeeId: string): Promise<Result> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const today = new Date().toISOString().slice(0, 10);
+  const { error } = await db.from("employees").update({
+    status: "재직",
+    is_active: true,
+    resigned_on: null,
+    resign_reason: null,
+  } as never).eq("id", employeeId);
+  if (error) return { ok: false, error: error.message };
+  await db.from("employee_events").insert({
+    employee_id: employeeId, event_date: today, event_type: "복직",
+    title: "복직/재입사", detail: null,
+  } as never);
+  revalidatePath("/employees");
+  revalidatePath("/");
+  return { ok: true };
+}
+
 /** 직원 메모 로그 추가(누적). 작성자·시각 기록. */
 export async function addEmployeeMemo(employeeId: string, body: string): Promise<Result> {
   const g = await ensureUser();
