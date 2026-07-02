@@ -341,9 +341,9 @@ export function EmployeesClient({
         />
       ) : (
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[300px_1fr]">
-        {/* 좌측 목록 */}
-        <div className="rounded-2xl border border-neutral-200 bg-white">
-          <div className="border-b border-neutral-100 p-3">
+        {/* 좌측 목록 — 우측 상세 높이에 맞춰 늘어남(바닥 라인 정렬) */}
+        <div className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+          <div className="shrink-0 border-b border-neutral-100 p-3">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -390,7 +390,7 @@ export function EmployeesClient({
             </div>
             <p className="mt-2 px-1 text-xs text-neutral-400">{filtered.length}명 표시</p>
           </div>
-          <div className="max-h-[calc(100vh-215px)] divide-y divide-neutral-100 overflow-y-auto">
+          <div className="min-h-0 flex-1 divide-y divide-neutral-100 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-neutral-400">직원이 없습니다.</p>
             ) : (
