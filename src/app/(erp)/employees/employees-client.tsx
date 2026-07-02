@@ -384,22 +384,25 @@ export function EmployeesClient({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* 헤더 카드 */}
-            <div className="rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 p-6 text-white shadow-sm">
-              <div className="flex flex-wrap items-start gap-4">
+            {/* 헤더 카드 — 사진 크게 + 황금비 밸런스 */}
+            <div className="rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-500 p-7 text-white shadow-md">
+              <div className="flex flex-wrap items-center gap-7">
                 <AvatarUpload emp={selected} onChanged={refresh} />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-[1.618]">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-xl font-bold">{selected.name}</h2>
+                    <h2 className="text-3xl font-bold tracking-tight">{selected.name}</h2>
+                    {selected.is_manager && (
+                      <span className="rounded-full bg-amber-300/90 px-2.5 py-0.5 text-xs font-bold text-amber-900">👑 매니저</span>
+                    )}
                     {selected.nickname && (
                       <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">{selected.nickname}</span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-sm text-white/70">
+                  <p className="mt-1.5 text-[15px] text-white/75">
                     {companyName.get(selected.company_id ?? "") ?? "미배정"} ·{" "}
                     {empLabel[selected.employment_type] ?? selected.employment_type}
                   </p>
-                  <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+                  <div className="mt-5 grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
                     <HeaderField label="연락처" value={selected.phone || "-"} />
                     <HeaderField label="아이디" value={accounts[selected.id]?.username || "미발급"} />
                     <HeaderField label="상태" value={selected.status ? statusLabel[selected.status] ?? selected.status : "-"} />
@@ -416,7 +419,7 @@ export function EmployeesClient({
                   </div>
                 </div>
               </div>
-              <div className="mt-4 flex flex-wrap gap-2">
+              <div className="mt-6 flex flex-wrap gap-2">
                 <HeaderBtn onClick={() => setEditFor(selected)}>✏️ 수정</HeaderBtn>
                 <HeaderBtn onClick={() => setAcctFor(selected)}>🔑 계정·비번</HeaderBtn>
                 <HeaderBtn
@@ -925,7 +928,7 @@ function AvatarUpload({ emp, onChanged }: { emp: EmployeeRow; onChanged: () => v
           if (f) resizeAndSave(f);
         }}
         title="클릭 또는 드래그해서 사진 업로드"
-        className={`group/av relative h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-2xl ring-2 ring-white/40 ${
+        className={`group/av relative h-32 w-32 shrink-0 cursor-pointer overflow-hidden rounded-3xl shadow-lg ring-4 ring-white/50 ${
           drag ? "opacity-70 ring-white" : ""
         }`}
       >
@@ -933,7 +936,7 @@ function AvatarUpload({ emp, onChanged }: { emp: EmployeeRow; onChanged: () => v
           // eslint-disable-next-line @next/next/no-img-element
           <img src={emp.photo_url} alt="" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-white/90 text-2xl font-bold text-neutral-500">
+          <div className="flex h-full w-full items-center justify-center bg-white/90 text-5xl font-bold text-neutral-400">
             {emp.name?.[0] ?? "?"}
           </div>
         )}
