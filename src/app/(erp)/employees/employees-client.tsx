@@ -217,6 +217,7 @@ export function EmployeesClient({
   const [resignFor, setResignFor] = useState<EmployeeRow | null>(null);
   const [search, setSearch] = useState("");
   const [seg, setSeg] = useState<"active" | "resigned" | "all">("active");
+  const [empFilter, setEmpFilter] = useState("");
   const TAB_KEYS: TabKey[] = ["info", "card", "work", "pay", "payback", "leave", "docs", "history"];
   const [tab, setTab] = useState<TabKey>(
     initialTab && (TAB_KEYS as string[]).includes(initialTab) ? (initialTab as TabKey) : "info"
@@ -250,10 +251,13 @@ export function EmployeesClient({
   const workingCount = rows.filter((r) => !isResigned(r)).length;
   const resignedCount = rows.filter((r) => isResigned(r)).length;
 
+  // 상태 세그먼트로 1차 추림 → 고용형태 카운트·필터의 기준
+  const segRows = rows.filter((r) => (seg === "all" ? true : seg === "active" ? !isResigned(r) : isResigned(r)));
+  const empTypeCount = (v: string) => segRows.filter((r) => (r.employment_type ?? "") === v).length;
+
   const q = search.trim().toLowerCase();
-  const filtered = rows.filter((r) => {
-    if (seg === "active" && isResigned(r)) return false;
-    if (seg === "resigned" && !isResigned(r)) return false;
+  const filtered = segRows.filter((r) => {
+    if (empFilter && (r.employment_type ?? "") !== empFilter) return false;
     if (!q) return true;
     return `${r.name} ${r.nickname ?? ""} ${r.phone ?? ""} ${accounts[r.id]?.username ?? ""} ${
       companyName.get(r.company_id ?? "") ?? ""
@@ -363,6 +367,27 @@ export function EmployeesClient({
                   {label} <span className={seg === k ? "text-neutral-300" : "text-neutral-400"}>{n}</span>
                 </button>
               ))}
+            </div>
+            {/* 고용형태 하위 필터 */}
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              <button
+                onClick={() => setEmpFilter("")}
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${empFilter === "" ? "bg-neutral-800 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}
+              >
+                전체 {segRows.length}
+              </button>
+              {empSel.map((o) => {
+                const n = empTypeCount(o.value);
+                return (
+                  <button
+                    key={o.value}
+                    onClick={() => setEmpFilter(empFilter === o.value ? "" : o.value)}
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${empFilter === o.value ? "bg-neutral-800 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}
+                  >
+                    {o.label} {n}
+                  </button>
+                );
+              })}
             </div>
             <p className="mt-2 px-1 text-xs text-neutral-400">{filtered.length}명 표시</p>
           </div>
