@@ -122,7 +122,7 @@ export function CalendarClient({
         description="직원별·업무별 할 일을 한눈에 — 캘린더 · 타임라인 · 칸반"
         actions={
           canCreate ? (
-            <button onClick={() => openNew()} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700">
+            <button onClick={() => openNew()} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
               + 새 업무
             </button>
           ) : null
@@ -142,7 +142,7 @@ export function CalendarClient({
         <StatPill label="지연" value={overdueCount} tone="rose" />
         <div className="ml-auto flex rounded-lg border border-neutral-200 bg-white p-1 text-sm">
           {([["month", "📅 캘린더"], ["timeline", "👥 타임라인"], ["kanban", "✅ 칸반"]] as const).map(([k, lbl]) => (
-            <button key={k} onClick={() => setView(k)} className={`rounded-md px-3 py-1.5 font-medium ${view === k ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>{lbl}</button>
+            <button key={k} onClick={() => setView(k)} className={`rounded-md px-3 py-1.5 font-medium ${view === k ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>{lbl}</button>
           ))}
         </div>
       </div>
@@ -217,7 +217,7 @@ function FilterBar({
           <Chip key={s} active={fStatus.has(s)} tone={TASK_STATUS_TONE[s]} onClick={() => onStatus(s)}>{TASK_STATUS_LABEL[s]}</Chip>
         ))}
         {showMine && (
-          <button onClick={onMine} className={`ml-2 rounded-full border px-2.5 py-1 text-xs font-medium ${mineOnly ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"}`}>
+          <button onClick={onMine} className={`ml-2 rounded-full border px-2.5 py-1 text-xs font-medium ${mineOnly ? "border-neutral-900 bg-indigo-600 text-white" : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"}`}>
             ⭐ 내 업무만
           </button>
         )}
@@ -237,7 +237,7 @@ function FilterBar({
         <span className="mr-1 text-xs font-semibold text-neutral-400">담당</span>
         {employees.map((e) => (
           <button key={e.id} onClick={() => onEmp(e.id)}
-            className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-2 text-xs font-medium ${fEmp.has(e.id) ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"}`}>
+            className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-2 text-xs font-medium ${fEmp.has(e.id) ? "border-neutral-900 bg-indigo-600 text-white" : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"}`}>
             <Avatar emp={e} size={18} />
             {e.name}
           </button>
@@ -309,7 +309,7 @@ function MonthView({
           return (
             <div key={i} onClick={() => onDay(d)}
               className="group min-h-[104px] cursor-pointer border-b border-r border-neutral-50 p-1.5 hover:bg-neutral-50/60">
-              <div className={`mb-1 text-right text-xs font-semibold tabular-nums ${isToday ? "inline-block rounded-full bg-neutral-900 px-1.5 text-white" : wd === 0 ? "text-rose-400" : wd === 6 ? "text-blue-400" : "text-neutral-500"}`}>
+              <div className={`mb-1 text-right text-xs font-semibold tabular-nums ${isToday ? "inline-block rounded-full bg-indigo-600 px-1.5 text-white" : wd === 0 ? "text-rose-400" : wd === 6 ? "text-blue-400" : "text-neutral-500"}`}>
                 {Number(d.slice(8))}
               </div>
               <div className="space-y-1">
@@ -388,7 +388,7 @@ function TimelineView({
             {days.map((d) => {
               const wd = dowOf(d);
               return (
-                <div key={d} style={{ width: cellW }} className={`border-r border-neutral-50 py-1 text-center text-[10px] tabular-nums ${d === today ? "bg-neutral-900 font-bold text-white" : wd === 0 ? "text-rose-400" : wd === 6 ? "text-blue-400" : "text-neutral-400"}`}>
+                <div key={d} style={{ width: cellW }} className={`border-r border-neutral-50 py-1 text-center text-[10px] tabular-nums ${d === today ? "bg-indigo-600 font-bold text-white" : wd === 0 ? "text-rose-400" : wd === 6 ? "text-blue-400" : "text-neutral-400"}`}>
                   <div>{Number(d.slice(8))}</div>
                   <div className="opacity-70">{DOW_KR[wd]}</div>
                 </div>
@@ -687,7 +687,7 @@ function TaskModal({
                 return (
                   <button key={e.id} type="button" disabled={!me.canAssign || !editable}
                     onClick={() => { const n = new Set(assignees); if (n.has(e.id)) n.delete(e.id); else n.add(e.id); setAssignees(n); }}
-                    className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-2 text-xs font-medium disabled:opacity-60 ${on ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"}`}>
+                    className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-2 text-xs font-medium disabled:opacity-60 ${on ? "border-neutral-900 bg-indigo-600 text-white" : "border-neutral-300 text-neutral-600 hover:bg-neutral-50"}`}>
                     <Avatar emp={e} size={18} />{e.name}
                   </button>
                 );
@@ -712,7 +712,7 @@ function TaskModal({
           <div className="flex gap-2">
             <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">닫기</button>
             {editable && (
-              <button onClick={save} disabled={pending} className="rounded-lg bg-neutral-900 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">
+              <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
                 {pending ? "저장 중…" : isNew ? "만들기" : "저장"}
               </button>
             )}
@@ -775,7 +775,7 @@ function Comments({ task, me, onChange }: { task: CalTask; me: Me; onChange: () 
       </div>
       <form className="mt-2 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (body.trim()) { run(() => addTaskComment(task.id, body)); setBody(""); } }}>
         <input value={body} onChange={(e) => setBody(e.target.value)} placeholder="댓글 입력…" className="flex-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-sm" />
-        <button disabled={pending} className="rounded-lg bg-neutral-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">등록</button>
+        <button disabled={pending} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">등록</button>
       </form>
     </div>
   );

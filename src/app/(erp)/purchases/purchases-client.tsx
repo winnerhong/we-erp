@@ -185,7 +185,7 @@ export function PurchasesClient({
           <button
             onClick={() => setCreating(true)}
             disabled={!activeCompanyId}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             + 구매 요청
           </button>
@@ -814,7 +814,7 @@ function RequestModal({
         {error && <p className="px-5 text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
           <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">취소</button>
-          <button onClick={save} disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">
+          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
             {pending ? "등록 중…" : "요청 등록"}
           </button>
         </div>

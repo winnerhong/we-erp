@@ -459,7 +459,7 @@ export function CardsClient({
                   onClick={() => setRowFilter(key)}
                   className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
                     rowFilter === key
-                      ? "bg-neutral-900 text-white"
+                      ? "bg-indigo-600 text-white"
                       : "border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
                   }`}
                 >
@@ -491,7 +491,7 @@ export function CardsClient({
             </button>
             <button
               onClick={addRow}
-              className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700"
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
             >
               ＋ 사용 추가
             </button>
@@ -683,7 +683,7 @@ function SettlementModal({
                       <button
                         onClick={() => link(t.id)}
                         disabled={pending}
-                        className="rounded-md bg-neutral-900 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-neutral-700"
+                        className="rounded-md bg-indigo-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-indigo-500"
                       >
                         연결
                       </button>
@@ -1032,7 +1032,7 @@ function CardModal({
             <button
               onClick={save}
               disabled={pending}
-              className="rounded-lg bg-neutral-900 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
             >
               {pending ? "저장 중…" : "저장"}
             </button>
@@ -1184,13 +1184,13 @@ function ImportModal({
           <div className="inline-flex rounded-lg border border-neutral-300 bg-white p-0.5 text-sm">
             <button
               onClick={() => setInputMode("import")}
-              className={`rounded-md px-3 py-1 font-medium ${inputMode === "import" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"}`}
+              className={`rounded-md px-3 py-1 font-medium ${inputMode === "import" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"}`}
             >
               📂 파일·붙여넣기
             </button>
             <button
               onClick={switchToManual}
-              className={`rounded-md px-3 py-1 font-medium ${inputMode === "manual" ? "bg-neutral-900 text-white" : "text-neutral-500 hover:text-neutral-800"}`}
+              className={`rounded-md px-3 py-1 font-medium ${inputMode === "manual" ? "bg-indigo-600 text-white" : "text-neutral-500 hover:text-neutral-800"}`}
             >
               ▦ 직접 입력(엑셀형)
             </button>

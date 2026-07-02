@@ -90,7 +90,7 @@ export function ContractsTab({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-neutral-800">📑 계약 <span className="text-xs font-normal text-neutral-400">{contracts.length}건</span></h3>
-        <button onClick={() => setEditing("new")} className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700">+ 계약 등록</button>
+        <button onClick={() => setEditing("new")} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500">+ 계약 등록</button>
       </div>
       {contracts.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-10 text-center text-sm text-neutral-400">등록된 계약이 없습니다. 수업·행사·렌탈 계약을 추가하세요.</p>
@@ -228,7 +228,7 @@ function ContractModal({
     <ModalShell title={isNew ? "계약 등록" : "계약 수정"} onClose={onClose} footer={
       <>
         <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">취소</button>
-        <button onClick={save} disabled={pending} className="rounded-lg bg-neutral-900 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">{pending ? "저장 중…" : isNew ? "등록" : "저장"}</button>
+        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{pending ? "저장 중…" : isNew ? "등록" : "저장"}</button>
       </>
     }>
       <div className="flex gap-1.5">
@@ -329,10 +329,10 @@ export function TransactionsTab({
       <div className="flex items-center justify-between">
         <div className="flex gap-1">
           {[{ v: "ALL", l: "전체" }, ...CONTRACT_TYPES.map((t) => ({ v: t, l: CONTRACT_TYPE_LABEL[t] }))].map((f) => (
-            <button key={f.v} onClick={() => setTypeF(f.v)} className={`rounded-full px-2.5 py-1 text-xs font-medium ${typeF === f.v ? "bg-neutral-900 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}>{f.l}</button>
+            <button key={f.v} onClick={() => setTypeF(f.v)} className={`rounded-full px-2.5 py-1 text-xs font-medium ${typeF === f.v ? "bg-indigo-600 text-white" : "border border-neutral-200 text-neutral-500 hover:bg-neutral-50"}`}>{f.l}</button>
           ))}
         </div>
-        <button onClick={() => setEditing("new")} className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700">+ 거래 입력</button>
+        <button onClick={() => setEditing("new")} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500">+ 거래 입력</button>
       </div>
 
       {shown.length === 0 ? (
@@ -428,7 +428,7 @@ function TxnModal({
         {txn ? <button onClick={remove} disabled={pending} className="rounded-lg px-3 py-2 text-sm font-medium text-rose-500 hover:bg-rose-50">삭제</button> : <span />}
         <div className="flex gap-2">
           <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">취소</button>
-          <button onClick={save} disabled={pending} className="rounded-lg bg-neutral-900 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">{pending ? "저장 중…" : "저장"}</button>
+          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{pending ? "저장 중…" : "저장"}</button>
         </div>
       </div>
     }>
@@ -501,7 +501,7 @@ export function SettlementsTab({
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-neutral-200 bg-white p-3">
         <span className="text-sm font-medium text-neutral-700">월별 정산 생성</span>
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm" />
-        <button onClick={genMonth} disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">
+        <button onClick={genMonth} disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
           {pending ? "처리 중…" : "이 달 미정산 거래 합산"}
         </button>
         <span className="ml-auto text-xs text-neutral-400">미정산 거래 {unsettled.length}건 / {krw(unsettled.reduce((s, t) => s + t.amount, 0))}</span>

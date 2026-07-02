@@ -143,7 +143,7 @@ export function EntityWorkspace({
                     onClick={() => setFilter(t.value)}
                     className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                       filter === t.value
-                        ? "bg-neutral-900 text-white"
+                        ? "bg-indigo-600 text-white"
                         : "border border-neutral-200 text-neutral-600 hover:bg-neutral-50"
                     }`}
                   >

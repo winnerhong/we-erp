@@ -167,7 +167,7 @@ export default async function ReportPage({
           <p className="text-xs text-neutral-500">순이익</p>
           <p className={`mt-1 text-xl font-bold tabular ${profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{krw(profit)}</p>
         </Card>
-        <Card className="bg-neutral-900 p-4 text-white">
+        <Card className="bg-indigo-600 p-4 text-white">
           <p className="text-xs text-neutral-300">예상 부가세 (참고)</p>
           <p className="mt-1 text-lg font-bold tabular">
             {payableVat >= 0 ? "납부 " : "환급 "}

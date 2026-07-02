@@ -136,7 +136,7 @@ export function OrgChart({
               <Row label="이메일" value={picked.email ?? "—"} />
               <Row label="입사일" value={picked.hiredOn ?? "—"} />
             </div>
-            <button onClick={() => setPicked(null)} className="mt-5 w-full rounded-lg bg-neutral-900 py-2 text-sm font-semibold text-white hover:bg-neutral-700">닫기</button>
+            <button onClick={() => setPicked(null)} className="mt-5 w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500">닫기</button>
           </div>
         </div>
       )}

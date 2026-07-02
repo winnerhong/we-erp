@@ -291,7 +291,7 @@ export function ExcelGrid<T>({
         <button
           onClick={() => setFilterOpen((v) => !v)}
           className={`rounded-lg border px-2.5 py-1.5 font-medium ${
-            filterOpen ? "border-neutral-800 bg-neutral-900 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
+            filterOpen ? "border-neutral-800 bg-indigo-600 text-white" : "border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"
           }`}
         >
           🔎 컬럼 필터

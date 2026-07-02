@@ -332,7 +332,7 @@ function TBtn({ on, active, children, title }: { on: () => void; active?: boolea
     <button
       onClick={on}
       title={title}
-      className={`min-w-[28px] rounded px-1.5 py-1 text-sm ${active ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
+      className={`min-w-[28px] rounded px-1.5 py-1 text-sm ${active ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
     >
       {children}
     </button>
@@ -352,7 +352,7 @@ function Menu({
     <div className="relative">
       <button
         onClick={() => setMenu(open ? null : id)}
-        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${open ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
+        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition ${open ? "bg-indigo-600 text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
       >
         <span className={`grid h-5 w-5 place-items-center rounded text-[11px] font-bold ${open ? "bg-white/20 text-white" : "bg-neutral-200 text-neutral-700"}`}>{icon}</span>
         {label}

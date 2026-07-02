@@ -130,7 +130,7 @@ export function PermissionsClient({
           <button
             onClick={addRole}
             disabled={pending || !newRole.trim()}
-            className="shrink-0 rounded-lg bg-neutral-900 px-3 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             + 등급 추가
           </button>

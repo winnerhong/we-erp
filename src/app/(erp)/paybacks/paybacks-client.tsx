@@ -94,7 +94,7 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
                 key={k}
                 onClick={() => setView(k)}
                 className={`rounded-md px-3 py-1 font-medium ${
-                  view === k ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+                  view === k ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"
                 }`}
               >
                 {label}
@@ -131,7 +131,7 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
               key={k}
               onClick={() => setRecipType(k)}
               className={`rounded-md px-3 py-1 font-medium ${
-                recipType === k ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"
+                recipType === k ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"
               }`}
             >
               {label}
@@ -293,7 +293,7 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
                               act(() => payPayback(p.id));
                           }}
                           disabled={pending}
-                          className="rounded-md bg-neutral-900 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-neutral-700"
+                          className="rounded-md bg-indigo-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-indigo-500"
                         >
                           지불완료
                         </button>

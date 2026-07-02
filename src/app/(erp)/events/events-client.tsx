@@ -104,7 +104,7 @@ function EventCard({ e, employees, today }: { e: EventItem; employees: Emp[]; to
           </select>
           <input value={role} onChange={(ev) => setRole(ev.target.value)} placeholder="역할(메인/보조/진행)" className="w-40 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm" />
           <button onClick={() => { if (!empId) { alert("직원을 선택하세요"); return; } run(() => assignStaff(e.id, empId, role)); setEmpId(""); setRole(""); }} disabled={pending}
-            className="rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50">+ 배정</button>
+            className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50">+ 배정</button>
         </div>
       </div>
     </div>

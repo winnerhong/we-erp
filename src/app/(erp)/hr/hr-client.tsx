@@ -151,7 +151,7 @@ function InsuranceTab({ payrolls, paybacks, month }: Props) {
                     <button
                       key={r}
                       onClick={() => setRate(r)}
-                      className={`rounded-md px-2 py-1.5 text-xs ${rate === r ? "bg-neutral-900 text-white" : "border border-neutral-300 hover:bg-neutral-50"}`}
+                      className={`rounded-md px-2 py-1.5 text-xs ${rate === r ? "bg-indigo-600 text-white" : "border border-neutral-300 hover:bg-neutral-50"}`}
                     >
                       {r}%
                     </button>
@@ -285,7 +285,7 @@ function CertificateTab({ employees, certificates }: Props) {
         <button
           onClick={() => setAdding(true)}
           disabled={employees.length === 0}
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
         >
           + 재직증명서 발급
         </button>
@@ -473,7 +473,7 @@ function LeaveTab({ employees, balances, leaves }: Props) {
         <button
           onClick={() => setAdding(true)}
           disabled={employees.length === 0}
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
         >
           + 휴가 신청
         </button>
@@ -992,7 +992,7 @@ function ModalFooter({ onClose, onSave, pending }: { onClose: () => void; onSave
   return (
     <div className="mt-4 flex justify-end gap-2">
       <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">취소</button>
-      <button onClick={onSave} disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">
+      <button onClick={onSave} disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
         {pending ? "저장 중…" : "저장"}
       </button>
     </div>

@@ -67,7 +67,7 @@ export function FormSection({
   return (
     <section className="rounded-xl border border-neutral-200 bg-white">
       <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-2.5">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[11px] font-bold text-white">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">
           {no}
         </span>
         <h4 className="text-sm font-semibold text-neutral-800">{title}</h4>

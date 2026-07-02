@@ -30,7 +30,7 @@ export function NoticesClient({
   return (
     <div>
       <PageHeader title="📢 공지" description="기관 대상 공지·안내문 발행 (게시판 + 알림톡 연동 준비)"
-        actions={<button onClick={() => setEditing("new")} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700">+ 공지 작성</button>} />
+        actions={<button onClick={() => setEditing("new")} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">+ 공지 작성</button>} />
 
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-16 text-center text-sm text-neutral-400">작성된 공지가 없습니다.</p>
@@ -147,7 +147,7 @@ function NoticeModal({
         </div>
         <div className="flex justify-end gap-2 border-t border-neutral-100 px-5 py-3">
           <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">취소</button>
-          <button onClick={save} disabled={pending} className="rounded-lg bg-neutral-900 px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">{pending ? "저장 중…" : isNew ? "작성" : "저장"}</button>
+          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{pending ? "저장 중…" : isNew ? "작성" : "저장"}</button>
         </div>
       </div>
     </div>

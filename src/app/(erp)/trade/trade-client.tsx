@@ -111,7 +111,7 @@ export function TradeClient({ invoices, settle, unlinked, partners, accounts, mo
           <p className="text-xs text-neutral-500">{settledLabel}</p>
           <p className="mt-1 text-lg font-bold tabular text-emerald-700">{krw(settledTotal)}</p>
         </Card>
-        <Card className={`p-4 ${payable >= 0 ? "bg-neutral-900 text-white" : "bg-emerald-50"}`}>
+        <Card className={`p-4 ${payable >= 0 ? "bg-indigo-600 text-white" : "bg-emerald-50"}`}>
           <p className={`text-xs ${payable >= 0 ? "text-neutral-300" : "text-neutral-500"}`}>예상 부가세</p>
           <p className="mt-1 text-lg font-bold tabular">
             {payable >= 0 ? "납부 " : "환급 "}
@@ -136,7 +136,7 @@ export function TradeClient({ invoices, settle, unlinked, partners, accounts, mo
         <button
           onClick={() => setAdding(true)}
           disabled={!activeCompanyId}
-          className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
         >
           + {isSales ? "매출" : "매입"} 추가
         </button>
@@ -514,7 +514,7 @@ function AddTradeModal({
       {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
       <div className="mt-4 flex justify-end gap-2">
         <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">취소</button>
-        <button onClick={save} disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">
+        <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
           {pending ? "저장 중…" : "저장"}
         </button>
       </div>

@@ -109,7 +109,7 @@ export function BulkImport({ kind, ctx }: { kind: ImportKind; ctx: ImportCtx }) 
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={downloadTemplate}
-                  className="rounded-lg bg-neutral-900 px-3 py-2 text-sm font-medium text-white hover:bg-neutral-700"
+                  className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
                 >
                   ① 양식 다운로드
                 </button>

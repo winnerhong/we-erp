@@ -37,7 +37,7 @@ export function UsersClient({
           <h1 className="text-xl font-bold text-neutral-900">사용자 관리</h1>
           <p className="mt-1 text-sm text-neutral-500">직원 계정 발급과 권한(관리자/일반)을 관리합니다.</p>
         </div>
-        <button onClick={() => setAdding(true)} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700">
+        <button onClick={() => setAdding(true)} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
           + 사용자 추가
         </button>
       </div>
@@ -155,7 +155,7 @@ function AddUserModal({
         </div>
         <div className="flex justify-end gap-2 border-t border-neutral-200 px-5 py-3">
           <button onClick={onClose} className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-50">취소</button>
-          <button onClick={save} disabled={pending} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50">
+          <button onClick={save} disabled={pending} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
             {pending ? "생성 중…" : "발급"}
           </button>
         </div>

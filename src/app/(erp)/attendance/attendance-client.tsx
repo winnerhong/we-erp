@@ -91,9 +91,9 @@ export function AttendanceClient({ date, rows }: { date: string; rows: AttRow[] 
         <p className="text-sm font-medium text-neutral-700">{dayLabel(date)}</p>
         {allDepts.length > 1 && (
           <div className="ml-2 flex flex-wrap gap-1">
-            <button onClick={() => setDept("")} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${dept === "" ? "bg-neutral-900 text-white" : "border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"}`}>전체</button>
+            <button onClick={() => setDept("")} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${dept === "" ? "bg-indigo-600 text-white" : "border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"}`}>전체</button>
             {allDepts.map((d) => (
-              <button key={d} onClick={() => setDept(d)} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${dept === d ? "bg-neutral-900 text-white" : "border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"}`}>{d}</button>
+              <button key={d} onClick={() => setDept(d)} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${dept === d ? "bg-indigo-600 text-white" : "border border-neutral-300 bg-white text-neutral-600 hover:bg-neutral-50"}`}>{d}</button>
             ))}
           </div>
         )}

@@ -79,7 +79,7 @@ function OptionEditor({
         <button
           onClick={() => label.trim() && onSave(label.trim(), color)}
           disabled={pending || !label.trim()}
-          className="rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-40"
+          className="rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
         >
           저장
         </button>

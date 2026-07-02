@@ -108,7 +108,7 @@ function ProfileModal({ profile, onClose }: { profile: MeProfile; onClose: () =>
           <button
             onClick={saveInfo}
             disabled={pending}
-            className="w-full rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+            className="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {pending ? "저장 중…" : "기본정보 저장"}
           </button>
@@ -151,7 +151,7 @@ function ProfileModal({ profile, onClose }: { profile: MeProfile; onClose: () =>
             <p className="text-base font-semibold text-neutral-900">{popup}</p>
             <button
               onClick={() => setPopup(null)}
-              className="mt-4 w-full rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700"
+              className="mt-4 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
             >
               확인
             </button>

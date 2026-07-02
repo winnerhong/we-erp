@@ -306,7 +306,7 @@ function EditPartnerModal({
           <button
             onClick={save}
             disabled={pending}
-            className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-700 disabled:opacity-50"
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
           >
             {pending ? "저장 중…" : "저장"}
           </button>

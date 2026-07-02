@@ -40,7 +40,7 @@ export function TopNav({ allowedHrefs, isAdmin }: { allowedHrefs: string[]; isAd
     <div ref={rootRef} className="border-t border-neutral-100">
       <nav className="flex flex-wrap items-center gap-0.5 px-3 py-1.5 text-sm">
         {allow.has("/") && (
-          <Link href="/" className={`rounded-lg px-3 py-1.5 font-medium ${dashOn ? "bg-neutral-900 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>
+          <Link href="/" className={`rounded-lg px-3 py-1.5 font-medium ${dashOn ? "bg-indigo-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}>
             📊 대시보드
           </Link>
         )}
@@ -67,7 +67,7 @@ export function TopNav({ allowedHrefs, isAdmin }: { allowedHrefs: string[]; isAd
                       href={i.href}
                       onClick={() => setOpen(null)}
                       className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                        isActive(i.href) ? "bg-neutral-900 font-semibold text-white" : "text-neutral-700 hover:bg-neutral-100"
+                        isActive(i.href) ? "bg-indigo-600 font-semibold text-white" : "text-neutral-700 hover:bg-neutral-100"
                       }`}
                     >
                       <span className="text-base">{i.icon}</span>
@@ -81,7 +81,7 @@ export function TopNav({ allowedHrefs, isAdmin }: { allowedHrefs: string[]; isAd
                       href={a.href}
                       onClick={() => setOpen(null)}
                       className={`flex items-center gap-2 rounded-lg px-3 py-2 ${
-                        isActive(a.href) ? "bg-neutral-900 font-semibold text-white" : "text-neutral-700 hover:bg-neutral-100"
+                        isActive(a.href) ? "bg-indigo-600 font-semibold text-white" : "text-neutral-700 hover:bg-neutral-100"
                       }`}
                     >
                       <span className="text-base">{a.icon}</span>

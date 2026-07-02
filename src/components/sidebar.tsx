@@ -40,7 +40,7 @@ export function Sidebar({ allowedHrefs, isAdmin }: { allowedHrefs: string[]; isA
       title={collapsed ? label : undefined}
       className={`flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors ${
         collapsed ? "justify-center" : ""
-      } ${active ? "bg-neutral-900 font-semibold text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
+      } ${active ? "bg-indigo-600 font-semibold text-white" : "text-neutral-700 hover:bg-neutral-100"}`}
     >
       <span className="text-base">{icon}</span>
       {!collapsed && <span className="truncate">{label}</span>}
