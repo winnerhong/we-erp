@@ -390,7 +390,7 @@ export function EmployeesClient({
             </div>
             <p className="mt-2 px-1 text-xs text-neutral-400">{filtered.length}명 표시</p>
           </div>
-          <div className="max-h-[70vh] divide-y divide-neutral-100 overflow-y-auto">
+          <div className="max-h-[calc(100vh-215px)] divide-y divide-neutral-100 overflow-y-auto">
             {filtered.length === 0 ? (
               <p className="px-4 py-10 text-center text-sm text-neutral-400">직원이 없습니다.</p>
             ) : (
