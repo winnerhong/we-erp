@@ -17,6 +17,8 @@ export default async function ErpLayout({
     getCurrentProfile(),
   ]);
   const allowedHrefs = await getAllowedMenuHrefs(profile?.role ?? null);
+  const activeCompany = companies.find((c) => c.id === activeId);
+  const isManaged = activeCompany?.relation_type === "MANAGED";
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -39,6 +41,13 @@ export default async function ErpLayout({
         </div>
         <TopNav allowedHrefs={allowedHrefs} isAdmin={profile?.role === "ADMIN"} />
       </header>
+
+      {/* 대리업무 배너 — 수임업체를 작업 중일 때 상시 표시(실수 방지) */}
+      {isManaged && (
+        <div className="flex items-center justify-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-medium text-amber-800">
+          🤝 대리업무 중 — 수임업체 <b>{activeCompany?.name}</b> 의 데이터를 다루고 있습니다.
+        </div>
+      )}
 
       {/* 본문 */}
       <main className="mx-auto w-full max-w-screen-2xl flex-1 p-5">{children}</main>
