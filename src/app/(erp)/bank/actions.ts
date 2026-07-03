@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 import { parseBankRow, bankSourceRef } from "@/lib/bank-import";
 import { matchGroupId } from "@/lib/bank-groups";
 import { periodLockError, periodOf } from "@/lib/period-lock";
@@ -59,7 +59,7 @@ export async function addTransaction(
     direction: "IN" | "OUT";
   }
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await ensureCompanyAccess(value.company_id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const lockErr = await periodLockError(db, value.company_id, value.txn_date);

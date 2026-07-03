@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 
 export interface Result {
   ok: boolean;
@@ -27,10 +27,10 @@ export async function addDailyRecord(input: {
   payment_method?: string | null;
   amount?: number;
 }): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   if (!input.company_id) return { ok: false, error: "사업자를 먼저 선택하세요." };
   if (!input.record_date) return { ok: false, error: "날짜가 없습니다." };
+  const g = await ensureCompanyAccess(input.company_id);
+  if (g.error) return { ok: false, error: g.error };
 
   const db = createAdminClient();
   const { data, error } = await db

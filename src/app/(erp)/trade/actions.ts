@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 import type { TaxInvoiceRow } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -26,9 +26,9 @@ export interface NewTrade {
 
 /** 매입/매출 거래 추가(세금계산서 장부에 기록). */
 export async function createTrade(v: NewTrade): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   if (!v.company_id) return { ok: false, error: "사업자를 먼저 선택하세요" };
+  const g = await ensureCompanyAccess(v.company_id);
+  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("tax_invoices").insert({
     company_id: v.company_id,
@@ -51,10 +51,16 @@ export async function createTrade(v: NewTrade): Promise<Result> {
   return { ok: true };
 }
 
+async function guardInvoice(db: ReturnType<typeof createAdminClient>, id: string): Promise<string | null> {
+  const { data } = await db.from("tax_invoices").select("company_id").eq("id", id).maybeSingle();
+  const acc = await ensureCompanyAccess((data as { company_id: string | null } | null)?.company_id ?? null);
+  return acc.error ?? null;
+}
+
 export async function updateTrade(id: string, patch: Partial<TaxInvoiceRow>): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardInvoice(db, id);
+  if (gErr) return { ok: false, error: gErr };
   const { error } = await db.from("tax_invoices").update(patch as never).eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/trade");
@@ -63,9 +69,9 @@ export async function updateTrade(id: string, patch: Partial<TaxInvoiceRow>): Pr
 }
 
 export async function deleteTrade(id: string): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardInvoice(db, id);
+  if (gErr) return { ok: false, error: gErr };
   // 연결된 통장 거래의 참조 해제 후 삭제
   await db.from("bank_transactions").update({ tax_invoice_id: null, tax_status: "NEEDED" } as never).eq("tax_invoice_id", id);
   const { error } = await db.from("tax_invoices").delete().eq("id", id);
