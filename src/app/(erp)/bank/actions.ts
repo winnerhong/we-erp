@@ -818,6 +818,36 @@ export async function unpayPayback(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/** 여러 페이백 일괄 지급완료(각 건마다 통장 출금거래 자동생성). 이미 지급된 건은 건너뜀. */
+export async function bulkPayPaybacks(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  let count = 0;
+  let firstErr: string | null = null;
+  for (const id of ids) {
+    const r = await payPayback(id);
+    if (!r.ok) { if (!firstErr && r.error !== "이미 지급완료된 페이백입니다.") firstErr = r.error ?? null; continue; }
+    count++;
+  }
+  if (count === 0 && firstErr) return { ok: false, error: firstErr };
+  return { ok: true, count };
+}
+
+/** 여러 페이백 일괄삭제(지급건은 자동 출금거래도 함께 삭제). */
+export async function bulkDeletePaybacks(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  let count = 0;
+  let firstErr: string | null = null;
+  for (const id of ids) {
+    const r = await deletePayback(id);
+    if (!r.ok) { if (!firstErr) firstErr = r.error ?? null; continue; }
+    count++;
+  }
+  if (count === 0 && firstErr) return { ok: false, error: firstErr };
+  return { ok: true, count };
+}
+
 type PaybackRowLite = {
   id: string;
   bank_transaction_id: string | null;

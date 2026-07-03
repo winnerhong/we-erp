@@ -6,7 +6,8 @@ import Link from "next/link";
 import { krw, PAYBACK_STATUS_LABEL } from "@/lib/labels";
 import { downloadXlsx } from "@/lib/sheet";
 import type { PaybackRow } from "@/lib/supabase/database.types";
-import { payPayback, unpayPayback, deletePayback } from "@/app/(erp)/bank/actions";
+import { payPayback, unpayPayback, deletePayback, bulkPayPaybacks, bulkDeletePaybacks } from "@/app/(erp)/bank/actions";
+import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
 
 // 원천징수율 → 소득구분 추정
 function incomeTypeOf(rate: number): string {
@@ -76,6 +77,16 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
     startTransition(async () => {
       const res = await fn();
       if (!res.ok) alert(res.error);
+      router.refresh();
+    });
+  }
+
+  const sel = useTableSelection(filtered);
+  function runBulk(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    startTransition(async () => {
+      const res = await fn();
+      if (!res.ok) { alert(res.error); return; }
+      sel.clear();
       router.refresh();
     });
   }
@@ -228,10 +239,22 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
           </table>
         </div>
       ) : (
+      <>
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <BulkButton onClick={() => runBulk(() => bulkPayPaybacks(sel.selected))} disabled={pending}>지불완료</BulkButton>
+        <BulkButton
+          tone="danger"
+          disabled={pending}
+          onClick={() => { if (confirm(`선택한 ${sel.count}건을 삭제할까요? (지급건은 자동 출금거래도 삭제)`)) runBulk(() => bulkDeletePaybacks(sel.selected)); }}
+        >
+          🗑 삭제
+        </BulkButton>
+      </BulkBar>
       <div className="overflow-x-auto rounded-xl border border-neutral-200">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-neutral-200 bg-neutral-50 text-xs text-neutral-600">
             <tr>
+              <SelectAllCell checked={sel.allChecked} someChecked={sel.someChecked} onToggle={sel.toggleAll} />
               <th className="px-4 py-2">거래일</th>
               <th className="px-3 py-2">대상</th>
               <th className="px-3 py-2">출처</th>
@@ -245,13 +268,14 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
           <tbody className="divide-y divide-neutral-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-neutral-400">
+                <td colSpan={9} className="px-4 py-12 text-center text-sm text-neutral-400">
                   페이백이 없습니다.
                 </td>
               </tr>
             ) : (
               filtered.map((p) => (
-                <tr key={p.id} className="hover:bg-neutral-50">
+                <tr key={p.id} className={`hover:bg-neutral-50 ${sel.isSelected(p.id) ? "bg-indigo-50/50" : ""}`}>
+                  <SelectRowCell checked={sel.isSelected(p.id)} onToggle={() => sel.toggle(p.id)} />
                   <td className="px-4 py-2 text-neutral-600">{p.sourceDate ?? "-"}</td>
                   <td className="px-3 py-2">
                     <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-500">
@@ -316,6 +340,7 @@ export function PaybacksClient({ rows }: { rows: PaybackView[] }) {
           </tbody>
         </table>
       </div>
+      </>
       )}
         </>
       )}
