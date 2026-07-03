@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui";
-import { managerSetSessionDone } from "@/app/(erp)/partners/crm-actions";
+import { managerSetSessionDone, bulkSetSessionsDone } from "@/app/(erp)/partners/crm-actions";
+import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
 
 export interface SessionItem {
   id: string;
@@ -42,10 +43,21 @@ export function SessionsClient({ date, sessions }: { date: string; sessions: Ses
   const totalPresent = sessions.reduce((sum, s) => sum + (s.presentCount ?? 0), 0);
   const rate = sessions.length > 0 ? Math.round((done / sessions.length) * 100) : 0;
 
+  const sel = useTableSelection(shown);
+
   function toggle(s: SessionItem) {
     startTransition(async () => {
       const r = await managerSetSessionDone(s.id, s.status !== "DONE");
       if (!r.ok) { alert(r.error); return; }
+      router.refresh();
+    });
+  }
+
+  function runBulk(done: boolean) {
+    startTransition(async () => {
+      const r = await bulkSetSessionsDone(sel.selected, done);
+      if (!r.ok) { alert(r.error); return; }
+      sel.clear();
       router.refresh();
     });
   }
@@ -79,6 +91,11 @@ export function SessionsClient({ date, sessions }: { date: string; sessions: Ses
         </select>
       </div>
 
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <BulkButton onClick={() => runBulk(true)} disabled={pending}>완료 처리</BulkButton>
+        <BulkButton onClick={() => runBulk(false)} disabled={pending}>완료 취소</BulkButton>
+      </BulkBar>
+
       {sessions.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-16 text-center text-sm text-neutral-400">이 날짜에 등록된 수업이 없습니다.</p>
       ) : (
@@ -86,13 +103,15 @@ export function SessionsClient({ date, sessions }: { date: string; sessions: Ses
           <table className="w-full text-left text-sm">
             <thead className="border-b border-neutral-100 bg-neutral-50 text-xs text-neutral-500">
               <tr>
+                <SelectAllCell checked={sel.allChecked} someChecked={sel.someChecked} onToggle={sel.toggleAll} />
                 <th className="px-3 py-2">강사</th><th className="px-3 py-2">기관</th><th className="px-3 py-2">반</th>
                 <th className="px-3 py-2 text-right">출석</th><th className="px-3 py-2">진도·특이사항</th><th className="px-3 py-2">상태</th><th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-50">
               {shown.map((s) => (
-                <tr key={s.id} className={s.status === "DONE" ? "bg-emerald-50/30" : ""}>
+                <tr key={s.id} className={`${s.status === "DONE" ? "bg-emerald-50/30" : ""} ${sel.isSelected(s.id) ? "bg-indigo-50/50" : ""}`}>
+                  <SelectRowCell checked={sel.isSelected(s.id)} onToggle={() => sel.toggle(s.id)} />
                   <td className="px-3 py-2 font-medium text-neutral-800">{s.instructorName ?? "미배정"}</td>
                   <td className="px-3 py-2 text-neutral-700">{s.partnerName}</td>
                   <td className="px-3 py-2 text-neutral-500">{s.title || "-"}</td>

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Card, Field, TextInput, NumberInput, SelectInput, EmptyState, Badge } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import type { TaxInvoiceRow } from "@/lib/supabase/database.types";
-import { createTrade, updateTrade, deleteTrade, linkInvoiceToBankTxn, unlinkInvoiceBank } from "./actions";
+import { createTrade, updateTrade, deleteTrade, linkInvoiceToBankTxn, unlinkInvoiceBank, bulkDeleteTrades, bulkSetTradeAccount } from "./actions";
 import { BankTradeTabs } from "@/components/bank-trade-tabs";
+import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
 
 type Account = { id: string; code: string; name: string };
 
@@ -76,6 +77,17 @@ export function TradeClient({ invoices, settle, unlinked, partners, accounts, mo
   const isSales = tab === "SALES";
   const unsettledLabel = isSales ? "미수금" : "미지급";
   const settledLabel = isSales ? "입금완료" : "지급완료";
+
+  const sel = useTableSelection(rows);
+  const [bulkPending, startBulk] = useTransition();
+  function runBulk(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    startBulk(async () => {
+      const r = await fn();
+      if (!r.ok) { alert(r.error); return; }
+      sel.clear();
+      router.refresh();
+    });
+  }
 
   return (
     <div>
@@ -155,6 +167,33 @@ export function TradeClient({ invoices, settle, unlinked, partners, accounts, mo
         </div>
       )}
 
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <select
+          disabled={bulkPending}
+          defaultValue=""
+          onChange={(e) => {
+            const v = e.target.value;
+            e.currentTarget.value = "";
+            if (!v) return;
+            runBulk(() => bulkSetTradeAccount(sel.selected, v === "__CLEAR__" ? null : v));
+          }}
+          className="rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700"
+        >
+          <option value="">계정과목 일괄지정…</option>
+          <option value="__CLEAR__">(계정 지우기)</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>{a.code} {a.name}</option>
+          ))}
+        </select>
+        <BulkButton
+          tone="danger"
+          disabled={bulkPending}
+          onClick={() => { if (confirm(`선택한 ${sel.count}건을 삭제할까요? 연결된 통장정산도 해제됩니다.`)) runBulk(() => bulkDeleteTrades(sel.selected)); }}
+        >
+          🗑 삭제
+        </BulkButton>
+      </BulkBar>
+
       <Card>
         {rows.length === 0 ? (
           <EmptyState message={`${month} ${isSales ? "매출" : "매입"} 거래가 없습니다.`} />
@@ -163,6 +202,7 @@ export function TradeClient({ invoices, settle, unlinked, partners, accounts, mo
             <table className="w-full text-left text-sm">
               <thead className="border-b border-neutral-200 text-xs text-neutral-500">
                 <tr>
+                  <SelectAllCell checked={sel.allChecked} someChecked={sel.someChecked} onToggle={sel.toggleAll} />
                   <th className="px-4 py-3">일자</th>
                   <th className="px-4 py-3">거래처</th>
                   <th className="px-4 py-3">증빙</th>
@@ -180,7 +220,8 @@ export function TradeClient({ invoices, settle, unlinked, partners, accounts, mo
                   const s = settle[r.id];
                   const od = isOverdue(r);
                   return (
-                    <tr key={r.id} className={od ? "bg-rose-50/50 hover:bg-rose-50" : "hover:bg-neutral-50"}>
+                    <tr key={r.id} className={`${od ? "bg-rose-50/50 hover:bg-rose-50" : "hover:bg-neutral-50"} ${sel.isSelected(r.id) ? "!bg-indigo-50/60" : ""}`}>
+                      <SelectRowCell checked={sel.isSelected(r.id)} onToggle={() => sel.toggle(r.id)} />
                       <td className="px-4 py-3 text-neutral-500">{r.doc_date ?? "-"}</td>
                       <td className="px-4 py-3 font-medium">
                         {r.partner_id ? partnerName.get(r.partner_id) ?? "거래처" : "미지정"}
@@ -217,7 +258,7 @@ export function TradeClient({ invoices, settle, unlinked, partners, accounts, mo
               </tbody>
               <tfoot className="border-t border-neutral-200 text-sm font-semibold">
                 <tr>
-                  <td className="px-4 py-3" colSpan={6}>
+                  <td className="px-4 py-3" colSpan={7}>
                     합계 ({rows.length}건) · {unsettledLabel} {krw(unsettled)}
                   </td>
                   <td className="px-4 py-3 text-right tabular">{krw(total)}</td>

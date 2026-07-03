@@ -17,7 +17,11 @@ import {
   setTaxInvoiceStatus,
   setTaxInvoiceSettled,
   deleteTaxInvoice,
+  bulkSetTaxStatus,
+  bulkSetTaxSettled,
+  bulkDeleteTaxInvoices,
 } from "./actions";
+import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
 
 interface Props {
   rows: TaxInvoiceRow[];
@@ -57,6 +61,17 @@ export function TaxInvoicesClient({ rows, partners, linkedIds, month, activeComp
 
   const tabRows = rows.filter((r) => r.type === tab);
   const unsettledCount = tabRows.filter((r) => !isSettled(r)).length;
+
+  const sel = useTableSelection(tabRows);
+  const [bulkPending, startBulk] = useTransition();
+  function runBulk(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    startBulk(async () => {
+      const r = await fn();
+      if (!r.ok) { alert(r.error); return; }
+      sel.clear();
+      router.refresh();
+    });
+  }
 
   return (
     <div>
@@ -144,6 +159,24 @@ export function TaxInvoicesClient({ rows, partners, linkedIds, month, activeComp
         </Card>
       )}
 
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <BulkButton onClick={() => runBulk(() => bulkSetTaxStatus(sel.selected, "DONE"))} disabled={bulkPending}>
+          {tab === "SALES" ? "발행완료" : "수취완료"}
+        </BulkButton>
+        <BulkButton onClick={() => runBulk(() => bulkSetTaxStatus(sel.selected, "PENDING"))} disabled={bulkPending}>대기</BulkButton>
+        <BulkButton onClick={() => runBulk(() => bulkSetTaxSettled(sel.selected, todayStr()))} disabled={bulkPending}>
+          {tab === "SALES" ? "받음(정산)" : "지급(정산)"}
+        </BulkButton>
+        <BulkButton onClick={() => runBulk(() => bulkSetTaxSettled(sel.selected, null))} disabled={bulkPending}>정산해제</BulkButton>
+        <BulkButton
+          tone="danger"
+          disabled={bulkPending}
+          onClick={() => { if (confirm(`선택한 ${sel.count}건을 삭제할까요?`)) runBulk(() => bulkDeleteTaxInvoices(sel.selected)); }}
+        >
+          🗑 삭제
+        </BulkButton>
+      </BulkBar>
+
       <Card>
         {tabRows.length === 0 ? (
           <EmptyState message={`${month} ${TAX_INVOICE_TYPE_LABEL[tab]} 세금계산서가 없습니다.`} />
@@ -152,6 +185,7 @@ export function TaxInvoicesClient({ rows, partners, linkedIds, month, activeComp
             <table className="w-full text-left text-sm">
               <thead className="border-b border-neutral-200 text-xs text-neutral-500">
                 <tr>
+                  <SelectAllCell checked={sel.allChecked} someChecked={sel.someChecked} onToggle={sel.toggleAll} />
                   <th className="px-4 py-3">일자</th>
                   <th className="px-4 py-3">거래처</th>
                   <th className="px-4 py-3 text-right">공급가액</th>
@@ -169,6 +203,8 @@ export function TaxInvoicesClient({ rows, partners, linkedIds, month, activeComp
                     row={r}
                     partnerName={r.partner_id ? partnerName.get(r.partner_id) : undefined}
                     linked={isLinked(r)}
+                    selected={sel.isSelected(r.id)}
+                    onToggleSelect={() => sel.toggle(r.id)}
                     onEdit={() => setEditing(r)}
                     onChanged={() => router.refresh()}
                   />
@@ -176,7 +212,7 @@ export function TaxInvoicesClient({ rows, partners, linkedIds, month, activeComp
               </tbody>
               <tfoot className="border-t border-neutral-200 text-sm font-semibold">
                 <tr>
-                  <td className="px-4 py-3" colSpan={2}>
+                  <td className="px-4 py-3" colSpan={3}>
                     합계 ({tabRows.length}건, 미정산 {unsettledCount})
                   </td>
                   <td className="px-4 py-3 text-right tabular">
@@ -222,12 +258,16 @@ function TaxRow({
   row,
   partnerName,
   linked,
+  selected,
+  onToggleSelect,
   onEdit,
   onChanged,
 }: {
   row: TaxInvoiceRow;
   partnerName?: string;
   linked: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
   onEdit: () => void;
   onChanged: () => void;
 }) {
@@ -265,7 +305,8 @@ function TaxRow({
 
   const done = row.status === "DONE";
   return (
-    <tr>
+    <tr className={selected ? "bg-indigo-50/50" : ""}>
+      <SelectRowCell checked={selected} onToggle={onToggleSelect} />
       <td className="px-4 py-3">{row.doc_date ?? "-"}</td>
       <td className="px-4 py-3">
         {partnerName ?? "-"}

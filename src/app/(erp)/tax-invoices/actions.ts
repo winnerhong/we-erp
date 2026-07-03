@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureCompanyAccess } from "@/lib/auth-guard";
+import { ensureCompanyAccess, guardCompanyRows } from "@/lib/auth-guard";
 import type { TaxInvoiceRow, TaxInvoiceStatus } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -61,6 +61,45 @@ export async function setTaxInvoiceSettled(id: string, settledDate: string | nul
   revalidatePath("/bank");
   revalidatePath("/");
   return { ok: true };
+}
+
+// ---------- 일괄 ----------
+export async function bulkSetTaxStatus(ids: string[], status: TaxInvoiceStatus): Promise<Result & { count?: number }> {
+  const g = await guardCompanyRows("tax_invoices", ids);
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("tax_invoices").update({ status } as never).in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/tax-invoices");
+  revalidatePath("/");
+  return { ok: true, count: ids.length };
+}
+
+/** 일괄 정산(받음/지급) 또는 해제(null). */
+export async function bulkSetTaxSettled(ids: string[], settledDate: string | null): Promise<Result & { count?: number }> {
+  const g = await guardCompanyRows("tax_invoices", ids);
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("tax_invoices").update({ settled_at: settledDate } as never).in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/tax-invoices");
+  revalidatePath("/bank");
+  revalidatePath("/");
+  return { ok: true, count: ids.length };
+}
+
+export async function bulkDeleteTaxInvoices(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await guardCompanyRows("tax_invoices", ids);
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("tax_invoices").delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/tax-invoices");
+  revalidatePath("/");
+  return { ok: true, count: ids.length };
 }
 
 export async function deleteTaxInvoice(id: string): Promise<Result> {

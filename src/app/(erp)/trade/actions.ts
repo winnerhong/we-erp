@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess, guardCompanyRows } from "@/lib/auth-guard";
 import type { TaxInvoiceRow } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -80,6 +80,35 @@ export async function deleteTrade(id: string): Promise<Result> {
   revalidatePath("/tax-invoices");
   revalidatePath("/");
   return { ok: true };
+}
+
+// ---------- 일괄 ----------
+/** 여러 거래 일괄삭제(연결 통장거래 참조 해제 후 삭제). */
+export async function bulkDeleteTrades(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await guardCompanyRows("tax_invoices", ids);
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  await db.from("bank_transactions").update({ tax_invoice_id: null, tax_status: "NEEDED" } as never).in("tax_invoice_id", ids);
+  const { error } = await db.from("tax_invoices").delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/trade");
+  revalidatePath("/tax-invoices");
+  revalidatePath("/");
+  return { ok: true, count: ids.length };
+}
+
+/** 여러 거래에 계정과목 일괄지정. */
+export async function bulkSetTradeAccount(ids: string[], accountId: string | null): Promise<Result & { count?: number }> {
+  const g = await guardCompanyRows("tax_invoices", ids);
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("tax_invoices").update({ account_id: accountId } as never).in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/trade");
+  revalidatePath("/tax-invoices");
+  return { ok: true, count: ids.length };
 }
 
 /** 거래(세금계산서)에 통장 거래를 연결 → 정산완료. */
