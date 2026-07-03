@@ -47,49 +47,52 @@ export default async function PartnersPage({
   let receivable = 0;
   let payable = 0;
   if (selectedId) {
-    const [{ data: cData }, { data: tData }, { data: sData }, { data: atData }, { data: mData }] = await Promise.all([
+    // 선택 거래처에만 의존하는 10개 조회는 전부 독립 → 단일 Promise.all 로 병렬
+    const [
+      { data: cData }, { data: tData }, { data: sData }, { data: atData }, { data: mData },
+      { data: tax }, { data: rcpt }, { data: bank }, { data: buy }, { data: pb },
+    ] = await Promise.all([
       supabase.from("contracts").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("partner_id", selectedId).order("txn_date", { ascending: false }),
       supabase.from("settlements").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
       supabase.from("partner_attachments").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
       supabase.from("partner_memos").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
+      supabase.from("tax_invoices").select("id, type, total_amount, status, doc_date, memo").eq("partner_id", selectedId),
+      supabase.from("receipts").select("id, total_amount, status, doc_date, vendor_name, memo").eq("partner_id", selectedId),
+      supabase.from("bank_transactions").select("id, txn_date, direction, amount, description, counterparty, memo").eq("partner_id", selectedId),
+      supabase.from("purchase_requests").select("id, amount, status, product_name, paid_at, created_at").eq("partner_id", selectedId),
+      supabase.from("paybacks").select("*").eq("partner_id", selectedId).order("created_at", { ascending: false }),
     ]);
     contracts = (cData ?? []) as ContractRow[];
     transactions = (tData ?? []) as TransactionRow[];
     settlements = (sData ?? []) as SettlementRow[];
     attachments = (atData ?? []) as PartnerAttachmentRow[];
     memos = (mData ?? []) as PartnerMemoRow[];
-    const [{ data: tax }, { data: rcpt }, { data: bank }, { data: buy }] = await Promise.all([
-      supabase.from("tax_invoices").select("id, type, total_amount, status, doc_date, memo").eq("partner_id", selectedId),
-      supabase.from("receipts").select("id, total_amount, status, doc_date, vendor_name, memo").eq("partner_id", selectedId),
-      supabase
-        .from("bank_transactions")
-        .select("id, txn_date, direction, amount, description, counterparty, memo")
-        .eq("partner_id", selectedId),
-      supabase
-        .from("purchase_requests")
-        .select("id, amount, status, product_name, paid_at, created_at")
-        .eq("partner_id", selectedId),
-    ]);
 
     type Tax = { id: string; type: string; total_amount: number; status: string; doc_date: string | null; memo: string | null };
     type Rcpt = { id: string; total_amount: number | null; status: string; doc_date: string | null; vendor_name: string | null; memo: string | null };
     type Bank = { id: string; txn_date: string; direction: string; amount: number; description: string | null; counterparty: string | null; memo: string | null };
     type Buy = { id: string; amount: number; status: string; product_name: string | null; paid_at: string | null; created_at: string };
     const taxRows = (tax ?? []) as Tax[];
-
     const invoiceIds = taxRows.map((t) => t.id);
-    if (invoiceIds.length > 0) {
-      const { data: links } = await supabase
-        .from("bank_transactions")
-        .select("tax_invoice_id")
-        .in("tax_invoice_id", invoiceIds);
-      const settled = new Set(((links ?? []) as { tax_invoice_id: string }[]).map((l) => l.tax_invoice_id));
-      for (const t of taxRows) {
-        if (settled.has(t.id)) continue;
-        if (t.type === "SALES") receivable += t.total_amount;
-        else payable += t.total_amount;
-      }
+    const pbRows = (pb ?? []) as PaybackRow[];
+    const pbTxnIds = [...new Set(pbRows.map((p) => p.bank_transaction_id).filter((v): v is string => !!v))];
+
+    // 두 종속 조회(정산연결·페이백 통장)는 서로 독립 → 병렬
+    const [linksRes, pbBankRes] = await Promise.all([
+      invoiceIds.length > 0
+        ? supabase.from("bank_transactions").select("tax_invoice_id").in("tax_invoice_id", invoiceIds)
+        : Promise.resolve({ data: [] as { tax_invoice_id: string }[] }),
+      pbTxnIds.length > 0
+        ? supabase.from("bank_transactions").select("id, txn_date, description").in("id", pbTxnIds)
+        : Promise.resolve({ data: [] as { id: string; txn_date: string; description: string | null }[] }),
+    ]);
+
+    const settled = new Set(((linksRes.data ?? []) as { tax_invoice_id: string }[]).map((l) => l.tax_invoice_id));
+    for (const t of taxRows) {
+      if (settled.has(t.id)) continue;
+      if (t.type === "SALES") receivable += t.total_amount;
+      else payable += t.total_amount;
     }
 
     entries = [
@@ -135,25 +138,12 @@ export default async function PartnersPage({
       })),
     ].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
-    // 페이백 — 이 거래처가 받는(또는 받을) 페이백
-    const { data: pb } = await supabase
-      .from("paybacks")
-      .select("*")
-      .eq("partner_id", selectedId)
-      .order("created_at", { ascending: false });
-    const pbRows = (pb ?? []) as PaybackRow[];
-    const pbTxnIds = [...new Set(pbRows.map((p) => p.bank_transaction_id).filter((v): v is string => !!v))];
+    // 페이백 — 이 거래처가 받는(또는 받을) 페이백 (조회는 위에서 병렬 로드됨)
     const pbDate = new Map<string, string>();
     const pbDesc = new Map<string, string>();
-    if (pbTxnIds.length > 0) {
-      const { data: t } = await supabase
-        .from("bank_transactions")
-        .select("id, txn_date, description")
-        .in("id", pbTxnIds);
-      for (const r of (t ?? []) as { id: string; txn_date: string; description: string | null }[]) {
-        pbDate.set(r.id, r.txn_date);
-        pbDesc.set(r.id, r.description ?? "");
-      }
+    for (const r of (pbBankRes.data ?? []) as { id: string; txn_date: string; description: string | null }[]) {
+      pbDate.set(r.id, r.txn_date);
+      pbDesc.set(r.id, r.description ?? "");
     }
     paybacks = pbRows.map((p) => toPaybackBrief(p, pbDate, pbDesc));
   }

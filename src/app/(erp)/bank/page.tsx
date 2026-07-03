@@ -102,16 +102,21 @@ export default async function BankPage({
   let groupQ = supabase.from("bank_txn_groups").select("*").order("name");
   if (filter) groupQ = groupQ.eq("company_id", filter);
 
-  // ---- 독립 목록 쿼리 일괄 병렬 ----
-  const [
-    { data: partnerData, error: partnerErr },
-    { data: accountData },
-    { data: catData },
-    { data: empData },
-    { data: cardData },
-    { data: receiptData },
-    { data: groupData },
-  ] = await Promise.all([
+  // 미수금/미지급 조회(사업자 스코프) — 결과 가공만 partners 목록에 의존
+  let invQuery = supabase
+    .from("tax_invoices")
+    .select("id, type, status, total_amount, due_date, doc_date, settled_at, partner_id, evidence")
+    .is("settled_at", null)
+    .order("due_date", { ascending: true, nullsFirst: false });
+  if (filter) invQuery = invQuery.eq("company_id", filter);
+  let linkQuery = supabase
+    .from("bank_transactions")
+    .select("tax_invoice_id")
+    .not("tax_invoice_id", "is", null);
+  if (filter) linkQuery = linkQuery.eq("company_id", filter);
+
+  // ---- 4개 독립 배치(목록 / 통장잔액 / 미정산 / 당월거래)를 한 번에 병렬 ----
+  const listP = Promise.all([
     partnerScope("id, name, default_tax_rate"),
     supabase.from("accounts").select("id, code, name").eq("is_active", true).order("code"),
     supabase.from("field_options").select("*").eq("category", "bank_category").order("sort_order"),
@@ -120,6 +125,59 @@ export default async function BankPage({
     receiptQuery,
     groupQ,
   ]);
+  // 통장별 현재 잔액 = 가장 최근 거래의 balance_after(전 거래 합산 안 함)
+  const balP = Promise.all(
+    accounts.map(async (a) => {
+      const { data } = await supabase
+        .from("bank_transactions")
+        .select("balance_after")
+        .eq("bank_account_id", a.id)
+        .not("balance_after", "is", null)
+        .order("txn_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return { id: a.id, balance: (data as { balance_after: number } | null)?.balance_after ?? null };
+    })
+  );
+  const invLinkP = Promise.all([invQuery, linkQuery]);
+  const monthP = account
+    ? Promise.all([
+        pageAll<BankTransactionRow>(() =>
+          supabase
+            .from("bank_transactions")
+            .select("*")
+            .eq("bank_account_id", account.id)
+            .gte("txn_date", first)
+            .lt("txn_date", next)
+            .order("txn_date", { ascending: true })
+            .order("created_at", { ascending: true })
+        ),
+        supabase
+          .from("bank_transactions")
+          .select("balance_after")
+          .eq("bank_account_id", account.id)
+          .lt("txn_date", first)
+          .not("balance_after", "is", null)
+          .order("txn_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
+    : null;
+
+  const [listResults, balResults, invLinkResults, monthResults] = await Promise.all([listP, balP, invLinkP, monthP]);
+
+  // --- 목록 ---
+  const [
+    { data: partnerData, error: partnerErr },
+    { data: accountData },
+    { data: catData },
+    { data: empData },
+    { data: cardData },
+    { data: receiptData },
+    { data: groupData },
+  ] = listResults;
   const groups = (groupData ?? []) as BankTxnGroupRow[];
 
   let partners: PartnerOpt[];
@@ -138,25 +196,9 @@ export default async function BankPage({
   );
   const receipts = (receiptData ?? []) as ReceiptOption[];
 
-  // 통장별 현재 잔액(전 기간) — 통합 수지 요약용
+  // --- 통장별 현재 잔액 ---
   const balByAcct = new Map<string, number>(accounts.map((a) => [a.id, a.opening_balance]));
-  // 각 통장 현재 잔액 = 가장 최근 거래의 업로드 잔액(balance_after). 없으면 기초잔액.
-  // (전 거래를 합산하지 않아 빠름)
-  await Promise.all(
-    accounts.map(async (a) => {
-      const { data } = await supabase
-        .from("bank_transactions")
-        .select("balance_after")
-        .eq("bank_account_id", a.id)
-        .not("balance_after", "is", null)
-        .order("txn_date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const b = (data as { balance_after: number } | null)?.balance_after;
-      if (b != null) balByAcct.set(a.id, b);
-    })
-  );
+  for (const r of balResults) if (r.balance != null) balByAcct.set(r.id, r.balance);
   const accountBalances: AccountBalance[] = accounts.map((a) => ({
     id: a.id,
     alias: a.alias,
@@ -165,20 +207,9 @@ export default async function BankPage({
   }));
   const grandBalance = accountBalances.reduce((s, a) => s + a.balance, 0);
 
-  // 미수금/미지급 — 통장 매칭(tax_invoice_id)도 settled_at도 없는 세금계산서
+  // --- 미수금/미지급 — 통장 매칭(tax_invoice_id)도 settled_at도 없는 세금계산서 ---
   const partnerName = new Map(partners.map((p) => [p.id, p.name]));
-  let invQuery = supabase
-    .from("tax_invoices")
-    .select("id, type, status, total_amount, due_date, doc_date, settled_at, partner_id, evidence")
-    .is("settled_at", null)
-    .order("due_date", { ascending: true, nullsFirst: false });
-  if (filter) invQuery = invQuery.eq("company_id", filter);
-  let linkQuery = supabase
-    .from("bank_transactions")
-    .select("tax_invoice_id")
-    .not("tax_invoice_id", "is", null);
-  if (filter) linkQuery = linkQuery.eq("company_id", filter);
-  const [{ data: invData }, { data: linkData }] = await Promise.all([invQuery, linkQuery]);
+  const [{ data: invData }, { data: linkData }] = invLinkResults;
   type RawInv = {
     id: string;
     type: string;
@@ -210,31 +241,9 @@ export default async function BankPage({
   let priorBalance = 0;
   let monthEndBalance = 0;
 
-  if (account) {
-    // 해당 월 거래만 조회(전 기간을 안 불러와서 빠름)
-    // 해당 월 거래 + 월초 잔액(직전 거래) 병렬 조회
-    const [monthRows, { data: prevRow }] = await Promise.all([
-      pageAll<BankTransactionRow>(() =>
-        supabase
-          .from("bank_transactions")
-          .select("*")
-          .eq("bank_account_id", account.id)
-          .gte("txn_date", first)
-          .lt("txn_date", next)
-          .order("txn_date", { ascending: true })
-          .order("created_at", { ascending: true })
-      ),
-      supabase
-        .from("bank_transactions")
-        .select("balance_after")
-        .eq("bank_account_id", account.id)
-        .lt("txn_date", first)
-        .not("balance_after", "is", null)
-        .order("txn_date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    ]);
+  if (account && monthResults) {
+    // 당월 거래 + 월초 잔액(직전 거래) — 위에서 병렬 로드됨
+    const [monthRows, { data: prevRow }] = monthResults;
     const txnsAsc = monthRows.slice().sort(
       (a, b) =>
         a.txn_date.localeCompare(b.txn_date) ||
