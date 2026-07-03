@@ -86,6 +86,51 @@ export async function setUserActive(id: string, isActive: boolean): Promise<Resu
   return { ok: true };
 }
 
+/** 다건 권한(등급) 변경. 본인 계정은 제외. */
+export async function bulkSetUsersRole(ids: string[], role: AppRole): Promise<Result & { count?: number }> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  const targets = [...new Set(ids.filter((id) => id && id !== g.profile!.id))];
+  if (targets.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("profiles").update({ role } as never).in("id", targets);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/users");
+  return { ok: true, count: targets.length };
+}
+
+/** 다건 활성/비활성. 본인 계정은 제외. */
+export async function bulkSetUsersActive(ids: string[], isActive: boolean): Promise<Result & { count?: number }> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  const targets = [...new Set(ids.filter((id) => id && id !== g.profile!.id))];
+  if (targets.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("profiles").update({ is_active: isActive } as never).in("id", targets);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/admin/users");
+  return { ok: true, count: targets.length };
+}
+
+/** 다건 계정 삭제(인증+프로필). 본인 계정은 제외. auth 삭제는 단건 API라 순차 처리. */
+export async function bulkDeleteUsers(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  const targets = [...new Set(ids.filter((id) => id && id !== g.profile!.id))];
+  if (targets.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  let count = 0;
+  let firstErr: string | null = null;
+  for (const id of targets) {
+    const { error } = await db.auth.admin.deleteUser(id); // 프로필은 FK cascade
+    if (error) { if (!firstErr) firstErr = error.message; continue; }
+    count++;
+  }
+  revalidatePath("/admin/users");
+  if (count === 0 && firstErr) return { ok: false, error: firstErr };
+  return { ok: true, count };
+}
+
 /** 계정 완전 삭제(인증 + 프로필). */
 export async function deleteUser(id: string): Promise<Result> {
   const g = await ensureAdmin();

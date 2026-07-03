@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Field, TextInput, SelectInput, Badge } from "@/components/ui";
 import type { ProfileRow, AppRole } from "@/lib/supabase/database.types";
-import { createUser, setUserRole, setUserActive, deleteUser, setUserCompanies } from "./actions";
+import { createUser, setUserRole, setUserActive, deleteUser, setUserCompanies, bulkSetUsersRole, bulkSetUsersActive, bulkDeleteUsers } from "./actions";
+import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
 
 type Role = { key: string; label: string };
 type CompanyOpt = { id: string; name: string; relation_type: string };
@@ -28,10 +29,23 @@ export function UsersClient({
   const [assignFor, setAssignFor] = useState<ProfileRow | null>(null);
   const roleLabel = new Map(roles.map((r) => [r.key, r.label]));
 
+  // 본인 계정은 일괄 대상에서 제외(권한/비활성/삭제 불가)
+  const selectable = users.filter((u) => u.id !== selfId);
+  const sel = useTableSelection(selectable);
+
   function act(fn: () => Promise<{ ok: boolean; error?: string }>) {
     startTransition(async () => {
       const res = await fn();
       if (!res.ok) alert(res.error);
+      router.refresh();
+    });
+  }
+
+  function runBulk(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    startTransition(async () => {
+      const res = await fn();
+      if (!res.ok) { alert(res.error); return; }
+      sel.clear();
       router.refresh();
     });
   }
@@ -48,10 +62,41 @@ export function UsersClient({
         </button>
       </div>
 
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <select
+          disabled={pending}
+          defaultValue=""
+          onChange={(e) => {
+            const role = e.target.value as AppRole;
+            e.currentTarget.value = "";
+            if (role) runBulk(() => bulkSetUsersRole(sel.selected, role));
+          }}
+          className="rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700"
+        >
+          <option value="">권한 일괄변경…</option>
+          {roles.map((r) => (
+            <option key={r.key} value={r.key}>{r.label}(으)로</option>
+          ))}
+        </select>
+        <BulkButton onClick={() => runBulk(() => bulkSetUsersActive(sel.selected, true))} disabled={pending}>활성화</BulkButton>
+        <BulkButton onClick={() => runBulk(() => bulkSetUsersActive(sel.selected, false))} disabled={pending}>비활성화</BulkButton>
+        <BulkButton
+          tone="danger"
+          disabled={pending}
+          onClick={() => {
+            if (confirm(`선택한 ${sel.count}개 계정을 완전히 삭제할까요? 되돌릴 수 없습니다.`))
+              runBulk(() => bulkDeleteUsers(sel.selected));
+          }}
+        >
+          🗑 삭제
+        </BulkButton>
+      </BulkBar>
+
       <Card className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-neutral-200 text-xs text-neutral-500">
             <tr>
+              <SelectAllCell checked={sel.allChecked} someChecked={sel.someChecked} onToggle={sel.toggleAll} />
               <th className="px-4 py-3">이메일</th>
               <th className="px-4 py-3">이름</th>
               <th className="px-4 py-3">권한</th>
@@ -62,7 +107,12 @@ export function UsersClient({
           </thead>
           <tbody className="divide-y divide-neutral-100">
             {users.map((u) => (
-              <tr key={u.id} className={u.is_active ? "" : "opacity-50"}>
+              <tr key={u.id} className={`${u.is_active ? "" : "opacity-50"} ${sel.isSelected(u.id) ? "bg-indigo-50/50" : ""}`}>
+                {u.id === selfId ? (
+                  <td className="w-9 px-3 py-3" />
+                ) : (
+                  <SelectRowCell checked={sel.isSelected(u.id)} onToggle={() => sel.toggle(u.id)} />
+                )}
                 <td className="px-4 py-3 font-medium">{u.email}{u.id === selfId && " (나)"}</td>
                 <td className="px-4 py-3">{u.name ?? "-"}</td>
                 <td className="px-4 py-3">

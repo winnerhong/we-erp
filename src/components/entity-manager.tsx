@@ -7,10 +7,13 @@ import {
   updateRow,
   deleteRow,
   setRowActive,
+  bulkSetRowActive,
+  bulkDeleteRows,
 } from "@/app/(erp)/actions";
 import type { ImportKind, ImportCtx } from "@/lib/import-specs";
 import { BulkImport } from "./bulk-import";
 import { Card, Field, TextInput, SelectInput, EmptyState, Badge } from "./ui";
+import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "./bulk-select";
 
 export type FieldType = "text" | "number" | "date" | "select";
 
@@ -112,6 +115,17 @@ export function EntityManager<T extends Row>({
   }
   if (searchText && q) {
     visibleRows = visibleRows.filter((r) => searchText(r).toLowerCase().includes(q));
+  }
+
+  const sel = useTableSelection(visibleRows);
+
+  function runBulk(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    startTransition(async () => {
+      const res = await fn();
+      if (!res.ok) { alert(res.error); return; }
+      sel.clear();
+      router.refresh();
+    });
   }
 
   function openAdd() {
@@ -234,6 +248,29 @@ export function EntityManager<T extends Row>({
         </div>
       )}
 
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        {!hideBuiltinStatus && (
+          <>
+            <BulkButton onClick={() => runBulk(() => bulkSetRowActive(kind, sel.selected, true))} disabled={pending}>
+              활성화
+            </BulkButton>
+            <BulkButton onClick={() => runBulk(() => bulkSetRowActive(kind, sel.selected, false))} disabled={pending}>
+              비활성화
+            </BulkButton>
+          </>
+        )}
+        <BulkButton
+          tone="danger"
+          disabled={pending}
+          onClick={() => {
+            if (confirm(`선택한 ${sel.count}건을 삭제할까요? 되돌릴 수 없습니다.`))
+              runBulk(() => bulkDeleteRows(kind, sel.selected));
+          }}
+        >
+          🗑 삭제
+        </BulkButton>
+      </BulkBar>
+
       <Card>
         {visibleRows.length === 0 ? (
           <EmptyState
@@ -248,6 +285,7 @@ export function EntityManager<T extends Row>({
             <table className="w-full text-left text-sm">
               <thead className="border-b border-neutral-200 text-xs text-neutral-500">
                 <tr>
+                  <SelectAllCell checked={sel.allChecked} someChecked={sel.someChecked} onToggle={sel.toggleAll} />
                   {showRowNumber && <th className="px-4 py-3 font-medium">No</th>}
                   {columns.map((c) => (
                     <th key={c.key} className="px-4 py-3 font-medium">
@@ -262,8 +300,9 @@ export function EntityManager<T extends Row>({
                 {visibleRows.map((row, idx) => (
                   <tr
                     key={row.id}
-                    className={!hideBuiltinStatus && !row.is_active ? "opacity-50" : ""}
+                    className={`${!hideBuiltinStatus && !row.is_active ? "opacity-50" : ""} ${sel.isSelected(row.id) ? "bg-indigo-50/50" : ""}`}
                   >
+                    <SelectRowCell checked={sel.isSelected(row.id)} onToggle={() => sel.toggle(row.id)} />
                     {showRowNumber && (
                       <td className="px-4 py-3 text-neutral-400 tabular">{idx + 1}</td>
                     )}

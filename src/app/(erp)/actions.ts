@@ -100,6 +100,50 @@ export async function deleteRow(
   return { ok: true };
 }
 
+/** 다건 활성/비활성 (soft). 관리자 전용. */
+export async function bulkSetRowActive(
+  kind: ImportKind,
+  ids: string[],
+  isActive: boolean
+): Promise<ActionResult & { count?: number }> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const table = IMPORT_SPECS[kind].table;
+  const { error } = await db.from(table).update({ is_active: isActive } as never).in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  await writeAudit(db, {
+    companyId: null, actor: auditActor(g.profile), table, entityId: null,
+    action: "UPDATE", label: `${ids.length}건 ${isActive ? "활성화" : "비활성화"}`,
+    changes: { is_active: { from: !isActive, to: isActive }, _count: ids.length },
+  });
+  revalidatePath(PATH[kind]);
+  revalidatePath("/");
+  return { ok: true, count: ids.length };
+}
+
+/** 다건 삭제 (참조 무결성은 FK에 위임). 관리자 전용. */
+export async function bulkDeleteRows(
+  kind: ImportKind,
+  ids: string[]
+): Promise<ActionResult & { count?: number }> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const table = IMPORT_SPECS[kind].table;
+  const { error } = await db.from(table).delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  await writeAudit(db, {
+    companyId: null, actor: auditActor(g.profile), table, entityId: null,
+    action: "DELETE", label: `${ids.length}건 일괄삭제`, changes: { _count: ids.length },
+  });
+  revalidatePath(PATH[kind]);
+  revalidatePath("/");
+  return { ok: true, count: ids.length };
+}
+
 export interface BulkResult {
   inserted: number;
   failed: { row: number; error: string }[];
