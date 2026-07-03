@@ -37,15 +37,30 @@ export default async function ReportPage({
   const acctQ = supabase.from("accounts").select("id, code, name");
   // 부문별 매출(거래 기준) — 원가배분 기준
   let txnQ = supabase.from("transactions").select("type, amount, status").neq("status", "CANCELED").gte("txn_date", first).lt("txn_date", next);
+  // 올해 월별 추이용 연간 쿼리 — 위 월별 쿼리와 독립이라 한 Promise.all 로 병렬화
+  const year = Number(month.slice(0, 4));
+  const yStart = `${year}-01-01`;
+  const yEnd = `${year + 1}-01-01`;
+  let yTaxQ = supabase.from("tax_invoices").select("type, supply_amount, doc_date, receipt_id").gte("doc_date", yStart).lt("doc_date", yEnd);
+  let yRcptQ = supabase.from("receipts").select("id, supply_amount, total_amount, doc_date, status").eq("status", "CONFIRMED").gte("doc_date", yStart).lt("doc_date", yEnd);
+  let yPayQ = supabase.from("payrolls").select("base_pay, allowance, nontax_allowance, year_month").gte("year_month", `${year}-01`).lte("year_month", `${year}-12`);
+  let yBuyQ = supabase.from("purchase_requests").select("amount, paid_at, receipt_id").eq("status", "PURCHASED").gte("paid_at", `${yStart}T00:00:00`).lt("paid_at", `${yEnd}T00:00:00`);
   if (filter) {
     taxQ = taxQ.eq("company_id", filter);
     rcptQ = rcptQ.eq("company_id", filter);
     payQ = payQ.eq("company_id", filter);
     buyQ = buyQ.eq("company_id", filter);
     txnQ = txnQ.eq("company_id", filter);
+    yTaxQ = yTaxQ.eq("company_id", filter);
+    yRcptQ = yRcptQ.eq("company_id", filter);
+    yPayQ = yPayQ.eq("company_id", filter);
+    yBuyQ = yBuyQ.eq("company_id", filter);
   }
-  const [{ data: tax }, { data: rcpt }, { data: pay }, { data: buy }, { data: accts }, { data: txnData }] = await Promise.all([
-    taxQ, rcptQ, payQ, buyQ, acctQ, txnQ,
+  const [
+    { data: tax }, { data: rcpt }, { data: pay }, { data: buy }, { data: accts }, { data: txnData },
+    { data: yTax }, { data: yRcpt }, { data: yPay }, { data: yBuy },
+  ] = await Promise.all([
+    taxQ, rcptQ, payQ, buyQ, acctQ, txnQ, yTaxQ, yRcptQ, yPayQ, yBuyQ,
   ]);
 
   type Tax = { type: string; supply_amount: number; vat_amount: number; receipt_id: string | null; account_id: string | null };
@@ -119,23 +134,8 @@ export default async function ReportPage({
     })
     .filter((d) => d.rev !== 0 || d.cost !== 0);
 
-  // ----- 올해 월별 순이익 추이 -----
-  const year = Number(month.slice(0, 4));
-  const yStart = `${year}-01-01`;
-  const yEnd = `${year + 1}-01-01`;
+  // ----- 올해 월별 순이익 추이 (쿼리는 위에서 병렬 로드됨) -----
   const mIdx = (d: string | null) => (d ? Number(d.slice(5, 7)) - 1 : -1);
-
-  let yTaxQ = supabase.from("tax_invoices").select("type, supply_amount, doc_date, receipt_id").gte("doc_date", yStart).lt("doc_date", yEnd);
-  let yRcptQ = supabase.from("receipts").select("id, supply_amount, total_amount, doc_date, status").eq("status", "CONFIRMED").gte("doc_date", yStart).lt("doc_date", yEnd);
-  let yPayQ = supabase.from("payrolls").select("base_pay, allowance, nontax_allowance, year_month").gte("year_month", `${year}-01`).lte("year_month", `${year}-12`);
-  let yBuyQ = supabase.from("purchase_requests").select("amount, paid_at, receipt_id").eq("status", "PURCHASED").gte("paid_at", `${yStart}T00:00:00`).lt("paid_at", `${yEnd}T00:00:00`);
-  if (filter) {
-    yTaxQ = yTaxQ.eq("company_id", filter);
-    yRcptQ = yRcptQ.eq("company_id", filter);
-    yPayQ = yPayQ.eq("company_id", filter);
-    yBuyQ = yBuyQ.eq("company_id", filter);
-  }
-  const [{ data: yTax }, { data: yRcpt }, { data: yPay }, { data: yBuy }] = await Promise.all([yTaxQ, yRcptQ, yPayQ, yBuyQ]);
 
   type YTax = { type: string; supply_amount: number; doc_date: string | null; receipt_id: string | null };
   type YRcpt = { id: string; supply_amount: number | null; total_amount: number | null; doc_date: string | null };

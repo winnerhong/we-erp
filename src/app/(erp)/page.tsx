@@ -32,26 +32,27 @@ export default async function DashboardPage() {
   const filter = companyFilter(ctx);
   const supabase = await createClient();
 
-  const now = new Date();
-  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // KST 기준(서버 TZ 무관) — UTC 게터로 한국 벽시계 날짜를 계산
+  const now = new Date(new Date().getTime() + 9 * 3600 * 1000);
+  const month = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
   const first = `${month}-01`;
-  const nextMo = now.getMonth() === 11 ? 1 : now.getMonth() + 2;
-  const nextY = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+  const nextMo = now.getUTCMonth() === 11 ? 1 : now.getUTCMonth() + 2;
+  const nextY = now.getUTCMonth() === 11 ? now.getUTCFullYear() + 1 : now.getUTCFullYear();
   const next = `${nextY}-${String(nextMo).padStart(2, "0")}-01`;
   const inMonth = (d: string | null) => !!d && d >= first && d < next;
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
 
   // ---- 기간 prep(순수 계산) ----
   const trendMonths: { key: string; label: string }[] = [];
   for (let i = 5; i >= 0; i--) {
-    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    trendMonths.push({ key: `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`, label: `${dt.getMonth() + 1}월` });
+    const dt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
+    trendMonths.push({ key: `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`, label: `${dt.getUTCMonth() + 1}월` });
   }
   const sixStart = `${trendMonths[0].key}-01`;
-  const d30 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30);
-  const d30s = `${d30.getFullYear()}-${String(d30.getMonth() + 1).padStart(2, "0")}-${String(d30.getDate()).padStart(2, "0")}`;
-  const d7 = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7);
-  const d7s = `${d7.getFullYear()}-${String(d7.getMonth() + 1).padStart(2, "0")}-${String(d7.getDate()).padStart(2, "0")}`;
+  const d30 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 30));
+  const d30s = `${d30.getUTCFullYear()}-${String(d30.getUTCMonth() + 1).padStart(2, "0")}-${String(d30.getUTCDate()).padStart(2, "0")}`;
+  const d7 = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 7));
+  const d7s = `${d7.getUTCFullYear()}-${String(d7.getUTCMonth() + 1).padStart(2, "0")}-${String(d7.getUTCDate()).padStart(2, "0")}`;
 
   // ---- 쿼리 빌더(사업자 스코프) ----
   const scope = <T extends { eq: (c: string, v: string) => T }>(q: T): T => (filter ? q.eq("company_id", filter) : q);
@@ -118,13 +119,20 @@ export default async function DashboardPage() {
   }).length;
   const hasOps = (openRentals ?? 0) > 0 || (expiringContracts ?? 0) > 0 || upcomingEvents > 0;
 
-  // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용. 페이지네이션(1000행 캡 회피).
+  // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용.
+  // 이미 로드한 tax_invoices id 로만 역조회(.in) → bank_transactions 전량 스캔 회피.
+  // settledIds 는 tax.data 의 id 에 대해서만 조회되므로 결과가 동일하다.
   const settledIds = new Set<string>();
-  for (let from = 0; from < 500000; from += 1000) {
-    const { data } = await scope(supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null)).range(from, from + 999);
-    const batch = (data ?? []) as { tax_invoice_id: string }[];
-    for (const b of batch) settledIds.add(b.tax_invoice_id);
-    if (batch.length < 1000) break;
+  const taxIdList = ((tax.data ?? []) as { id: string }[]).map((t) => t.id);
+  if (taxIdList.length > 0) {
+    const chunks: string[][] = [];
+    for (let i = 0; i < taxIdList.length; i += 200) chunks.push(taxIdList.slice(i, i + 200));
+    const linkResults = await Promise.all(
+      chunks.map((chunk) => scope(supabase.from("bank_transactions").select("tax_invoice_id").in("tax_invoice_id", chunk)))
+    );
+    for (const { data } of linkResults) {
+      for (const b of (data ?? []) as { tax_invoice_id: string }[]) settledIds.add(b.tax_invoice_id);
+    }
   }
 
   // ----- 최근 6개월 추세(매출 vs 지출) -----

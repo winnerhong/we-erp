@@ -61,18 +61,12 @@ export default async function CardsPage({
   let cardTxnCount = 0;
   let cardLatestDate: string | null = null;
   if (card) {
-    const { count } = await supabase
-      .from("card_transactions")
-      .select("*", { count: "exact", head: true })
-      .eq("card_id", card.id);
+    // 건수·최근일 조회는 서로 독립 → 병렬
+    const [{ count }, { data: latest }] = await Promise.all([
+      supabase.from("card_transactions").select("*", { count: "exact", head: true }).eq("card_id", card.id),
+      supabase.from("card_transactions").select("txn_date").eq("card_id", card.id).order("txn_date", { ascending: false }).limit(1).maybeSingle(),
+    ]);
     cardTxnCount = count ?? 0;
-    const { data: latest } = await supabase
-      .from("card_transactions")
-      .select("txn_date")
-      .eq("card_id", card.id)
-      .order("txn_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
     cardLatestDate = (latest as { txn_date: string } | null)?.txn_date ?? null;
   }
 

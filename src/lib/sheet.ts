@@ -1,7 +1,7 @@
 // 스프레드시트 파일(csv/xlsx/xls) → 헤더 기준 객체 배열.
 // 은행 엑셀은 상단에 제목·계좌정보·빈 줄이 섞여 있으므로 '진짜 헤더 행'을 자동 탐지한다.
 // 브라우저(미리보기)에서 사용. xlsx 파싱은 클라이언트에서 수행.
-import * as XLSX from "xlsx";
+// ※ xlsx(SheetJS)는 무거워서 정적 import 하지 않고, 실제로 파싱/내보낼 때만 동적 로드한다.
 import { parseCSV } from "./csv";
 import { normalizeHeaderlessBankAOA } from "./bank-import";
 
@@ -115,8 +115,9 @@ export function parseClipboard(html: string, text: string): Record<string, strin
   return parsePastedText(text);
 }
 
-/** xlsx/xls ArrayBuffer → 첫 시트 기준 객체 배열. */
-export function parseSheetBuffer(buf: ArrayBuffer): Record<string, string>[] {
+/** xlsx/xls ArrayBuffer → 첫 시트 기준 객체 배열. (xlsx 동적 로드) */
+export async function parseSheetBuffer(buf: ArrayBuffer): Promise<Record<string, string>[]> {
+  const XLSX = await import("xlsx");
   const wb = XLSX.read(buf, { type: "array" });
   const sheetName = wb.SheetNames[0];
   const ws = sheetName ? wb.Sheets[sheetName] : undefined;
@@ -131,13 +132,14 @@ export function parseSheetBuffer(buf: ArrayBuffer): Record<string, string>[] {
   return rowsFromAOA(aoa.map((r) => (r as unknown[]).map((c) => String(c ?? ""))));
 }
 
-/** 헤더 + 행(2차원 배열)을 .xlsx 파일로 내려받기(브라우저). */
-export function downloadXlsx(
+/** 헤더 + 행(2차원 배열)을 .xlsx 파일로 내려받기(브라우저). (xlsx 동적 로드) */
+export async function downloadXlsx(
   filename: string,
   headers: string[],
   rows: (string | number)[][],
   sheetName = "Sheet1"
-): void {
+): Promise<void> {
+  const XLSX = await import("xlsx");
   const aoa: (string | number)[][] = [headers, ...rows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   const wb = XLSX.utils.book_new();
@@ -152,5 +154,5 @@ export async function parseSpreadsheetFile(file: File): Promise<Record<string, s
     return parseCSV(await file.text());
   }
   const buf = await file.arrayBuffer();
-  return parseSheetBuffer(buf);
+  return await parseSheetBuffer(buf);
 }

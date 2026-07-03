@@ -68,16 +68,27 @@ export default async function DailyPage({
     .select("direction, amount")
     .eq("txn_date", date);
 
+  // 월간 캘린더용 쿼리 — 당일 집계와 독립이라 한 Promise.all 로 병렬화
+  const { first: mFirst, next: mNext } = monthBounds(date);
+  let mTaxQ = supabase.from("tax_invoices").select("type, total_amount, doc_date").gte("doc_date", mFirst).lt("doc_date", mNext);
+  let mRcptQ = supabase.from("receipts").select("total_amount, doc_date").gte("doc_date", mFirst).lt("doc_date", mNext);
+  let mBuyQ = supabase.from("purchase_requests").select("amount, paid_at").eq("status", "PURCHASED").gte("paid_at", `${mFirst}T00:00:00`).lt("paid_at", `${mNext}T00:00:00`);
+
   if (filter) {
     taxQ = taxQ.eq("company_id", filter);
     rcptQ = rcptQ.eq("company_id", filter);
     buyPaidQ = buyPaidQ.eq("company_id", filter);
     buyReqQ = buyReqQ.eq("company_id", filter);
     bankQ = bankQ.eq("company_id", filter);
+    mTaxQ = mTaxQ.eq("company_id", filter);
+    mRcptQ = mRcptQ.eq("company_id", filter);
+    mBuyQ = mBuyQ.eq("company_id", filter);
   }
 
-  const [{ data: partners }, { data: tax }, { data: rcpt }, { data: buyPaid }, { data: buyReq }, { data: bank }] =
-    await Promise.all([partnerQ, taxQ, rcptQ, buyPaidQ, buyReqQ, bankQ]);
+  const [
+    { data: partners }, { data: tax }, { data: rcpt }, { data: buyPaid }, { data: buyReq }, { data: bank },
+    { data: mTax }, { data: mRcpt }, { data: mBuy },
+  ] = await Promise.all([partnerQ, taxQ, rcptQ, buyPaidQ, buyReqQ, bankQ, mTaxQ, mRcptQ, mBuyQ]);
 
   const pName = new Map(((partners ?? []) as { id: string; name: string }[]).map((p) => [p.id, p.name]));
 
@@ -136,23 +147,7 @@ export default async function DailyPage({
   const bankIn = bankRows.filter((b) => b.direction === "IN").reduce((s, b) => s + b.amount, 0);
   const bankOut = bankRows.filter((b) => b.direction === "OUT").reduce((s, b) => s + b.amount, 0);
 
-  // ----- 월간 캘린더용: 일별 순현금흐름(매출−매입−구매) -----
-  const { first: mFirst, next: mNext } = monthBounds(date);
-  let mTaxQ = supabase.from("tax_invoices").select("type, total_amount, doc_date").gte("doc_date", mFirst).lt("doc_date", mNext);
-  let mRcptQ = supabase.from("receipts").select("total_amount, doc_date").gte("doc_date", mFirst).lt("doc_date", mNext);
-  let mBuyQ = supabase
-    .from("purchase_requests")
-    .select("amount, paid_at")
-    .eq("status", "PURCHASED")
-    .gte("paid_at", `${mFirst}T00:00:00`)
-    .lt("paid_at", `${mNext}T00:00:00`);
-  if (filter) {
-    mTaxQ = mTaxQ.eq("company_id", filter);
-    mRcptQ = mRcptQ.eq("company_id", filter);
-    mBuyQ = mBuyQ.eq("company_id", filter);
-  }
-  const [{ data: mTax }, { data: mRcpt }, { data: mBuy }] = await Promise.all([mTaxQ, mRcptQ, mBuyQ]);
-
+  // ----- 월간 캘린더용: 일별 순현금흐름(매출−매입−구매) (쿼리는 위에서 병렬 로드) -----
   const monthNet: Record<string, number> = {};
   const add = (d: string | null, v: number) => {
     if (!d) return;

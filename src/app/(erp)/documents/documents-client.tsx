@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { DocumentTemplateEditor } from "@/components/document-template-editor";
+import dynamic from "next/dynamic";
 import type { DocumentTemplateRow } from "@/lib/supabase/database.types";
 import type { IssueOverview } from "./page";
+
+// tiptap/ProseMirror(~15개 패키지)는 편집기를 실제로 열 때만 로드 → 탭·발행이력 즉시 렌더
+const DocumentTemplateEditor = dynamic(
+  () => import("@/components/document-template-editor").then((m) => m.DocumentTemplateEditor),
+  { ssr: false, loading: () => <div className="h-96 animate-pulse rounded-2xl border border-neutral-200 bg-white" /> }
+);
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "작성중", cls: "bg-neutral-100 text-neutral-600" },

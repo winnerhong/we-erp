@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCompanyContext, companyFilter } from "@/lib/active-company";
 import { DocumentsClient } from "./documents-client";
 import type { DocumentTemplateRow, DocumentIssueRow } from "@/lib/supabase/database.types";
 
@@ -15,14 +16,19 @@ export interface IssueOverview {
 
 export default async function DocumentsPage() {
   const supabase = await createClient();
+  const filter = companyFilter(await getCompanyContext());
+
+  // 활성 사업자 스코프 — 발행이력을 회사별로 제한(회사 미지정 문서는 함께 노출)
+  let issuesQ = supabase
+    .from("document_issues")
+    .select("id, title, status, issued_on, signed_file, employee_id")
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (filter) issuesQ = issuesQ.or(`company_id.eq.${filter},company_id.is.null`);
 
   const [{ data: tpls }, { data: issues }, { data: emps }] = await Promise.all([
     supabase.from("document_templates").select("*").order("sort_order").order("created_at"),
-    supabase
-      .from("document_issues")
-      .select("id, title, status, issued_on, signed_file, employee_id")
-      .order("created_at", { ascending: false })
-      .limit(200),
+    issuesQ,
     supabase.from("employees").select("id, name"),
   ]);
 

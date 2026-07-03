@@ -21,8 +21,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const ctx = await getCompanyContext();
   const filter = companyFilter(ctx);
 
-  // 직원·카테고리·내 정보
-  const profile = await getCurrentProfile();
+  // 직원·카테고리·내 정보 — 서로 독립이므로 프로필 조회까지 한번에 병렬
   let empQ = supabase
     .from("employees")
     .select("id, name, company_id, department, photo_url, profile_id")
@@ -30,7 +29,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     .order("name");
   if (filter) empQ = empQ.eq("company_id", filter);
 
-  const [{ data: empData }, { data: catOpts }, { data: deptOpts }] = await Promise.all([
+  const [profile, { data: empData }, { data: catOpts }, { data: deptOpts }] = await Promise.all([
+    getCurrentProfile(),
     empQ,
     supabase.from("field_options").select("value, label, color").eq("category", "task_category").eq("is_active", true).order("sort_order"),
     supabase.from("field_options").select("value, label").eq("category", "department"),
