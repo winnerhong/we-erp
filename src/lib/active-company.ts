@@ -36,8 +36,9 @@ export async function getCompanyContext(): Promise<CompanyContext> {
   } else if (cookieVal && companies.some((c) => c.id === cookieVal)) {
     activeId = cookieVal;
   } else {
-    // 기본값: 첫 사업자, 없으면 전체보기
-    activeId = companies[0]?.id ?? ALL_COMPANIES;
+    // 기본값: 자사(OWNED) 우선(수임업체로 실수 진입 방지), 없으면 첫 사업자, 없으면 전체보기
+    const firstOwned = companies.find((c) => c.relation_type !== "MANAGED");
+    activeId = (firstOwned ?? companies[0])?.id ?? ALL_COMPANIES;
   }
 
   return { activeId, companies };
