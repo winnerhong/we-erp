@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchLinkPreview, type LinkPreview } from "@/lib/link-preview";
 import { AUTO_APPROVE_LIMIT } from "@/lib/labels";
 import { ensureUser, ensureCompanyAccess, guardCompanyRow, guardCompanyRows } from "@/lib/auth-guard";
+import { kstToday } from "@/lib/attendance";
 import type {
   PurchaseRequestRow,
   PurchaseStatus,
@@ -87,9 +88,14 @@ export async function markPurchased(
   // 통장 연동을 위해 구매 정보 조회
   const { data: pr } = await db
     .from("purchase_requests")
-    .select("company_id, amount, product_name, partner_id, account_id")
+    .select("company_id, amount, product_name, partner_id, account_id, status")
     .eq("id", id)
     .maybeSingle();
+
+  // 이미 결제완료면 재처리 금지(중복 클릭·재시도 시 통장 출금 이중 생성 방지)
+  if ((pr as { status?: string } | null)?.status === "PURCHASED") {
+    return { ok: false, error: "이미 결제완료 처리된 요청입니다." };
+  }
 
   const { error } = await db
     .from("purchase_requests")
@@ -115,7 +121,7 @@ export async function markPurchased(
       await db.from("bank_transactions").insert({
         bank_account_id: bankAccountId,
         company_id: p.company_id,
-        txn_date: new Date().toISOString().slice(0, 10),
+        txn_date: kstToday(),
         direction: "OUT",
         amount: p.amount,
         description: p.product_name ? `구매: ${p.product_name}` : "구매 결제",

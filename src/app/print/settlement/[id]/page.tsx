@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureCompanyAccess } from "@/lib/auth-guard";
 import { StatementView, type StmtData } from "./statement-view";
 import type { SettlementRow, TransactionRow, PartnerRow, CompanyRow } from "@/lib/supabase/database.types";
 
@@ -10,6 +11,10 @@ export default async function SettlementPrintPage({ params }: { params: Promise<
   const { data: sData } = await db.from("settlements").select("*").eq("id", id).maybeSingle();
   const settlement = sData as SettlementRow | null;
   if (!settlement) return <div className="p-10 text-center text-sm text-neutral-500">정산을 찾을 수 없습니다.</div>;
+
+  // 서비스롤로 id 조회하므로 RLS 우회 — 앱 레벨 회사 접근 검사가 유일 방어선
+  const acc = await ensureCompanyAccess(settlement.company_id);
+  if (acc.error) return <div className="p-10 text-center text-sm text-neutral-500">이 문서에 접근할 권한이 없습니다.</div>;
 
   const [{ data: pData }, { data: tData }, { data: cData }] = await Promise.all([
     db.from("partners").select("*").eq("id", settlement.partner_id).maybeSingle(),

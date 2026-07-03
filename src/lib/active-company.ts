@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { createClient } from "./supabase/server";
 import type { CompanyRow } from "./supabase/database.types";
@@ -14,8 +15,9 @@ export interface CompanyContext {
   restricted: boolean;
 }
 
-/** 헤더/페이지에서 현재 선택된 사업자 컨텍스트를 읽는다. */
-export async function getCompanyContext(): Promise<CompanyContext> {
+/** 헤더/페이지에서 현재 선택된 사업자 컨텍스트를 읽는다.
+ *  React cache 로 요청 단위 메모이즈 — 레이아웃+페이지가 각각 호출해도 실제 쿼리는 1회. */
+export const getCompanyContext = cache(async function getCompanyContext(): Promise<CompanyContext> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("companies")
@@ -63,7 +65,7 @@ export async function getCompanyContext(): Promise<CompanyContext> {
   }
 
   return { activeId, companies, restricted };
-}
+});
 
 /**
  * 활성 사업자 필터를 쿼리에 적용할지 판단.

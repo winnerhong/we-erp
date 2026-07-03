@@ -1,9 +1,11 @@
+import { cache } from "react";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
 import type { ProfileRow, EmployeeRow } from "./supabase/database.types";
 
-/** 현재 로그인 사용자의 프로필(없으면 null). */
-export async function getCurrentProfile(): Promise<ProfileRow | null> {
+/** 현재 로그인 사용자의 프로필(없으면 null).
+ *  React cache 로 요청 단위 메모이즈 — 한 요청에서 여러 가드가 호출해도 실제 조회는 1회. */
+export const getCurrentProfile = cache(async function getCurrentProfile(): Promise<ProfileRow | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -11,7 +13,7 @@ export async function getCurrentProfile(): Promise<ProfileRow | null> {
   if (!user) return null;
   const { data } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
   return (data as ProfileRow | null) ?? null;
-}
+});
 
 export interface Guard {
   profile?: ProfileRow;

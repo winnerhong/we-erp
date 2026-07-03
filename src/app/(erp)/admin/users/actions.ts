@@ -60,7 +60,11 @@ export async function createUser(
     name: name.trim() || null,
     role,
   } as never);
-  if (pErr) return { ok: false, error: pErr.message };
+  if (pErr) {
+    // 프로필 생성 실패 시 방금 만든 auth 사용자 롤백(고아 계정 방지)
+    await db.auth.admin.deleteUser(data.user.id).catch(() => {});
+    return { ok: false, error: pErr.message };
+  }
 
   revalidatePath("/admin/users");
   return { ok: true };
