@@ -32,6 +32,10 @@ export interface AssetInput {
   purchase_price?: string | number | null;
   purchase_date?: string | null;
   memo?: string | null;
+  // 감가상각(20260729)
+  useful_life_months?: string | number | null;
+  salvage_value?: string | number | null;
+  depreciation_method?: string | null;
 }
 
 export async function createAsset(input: AssetInput): Promise<Result> {
@@ -52,6 +56,9 @@ export async function createAsset(input: AssetInput): Promise<Result> {
     purchase_price: numOrNull(input.purchase_price),
     purchase_date: input.purchase_date || null,
     memo: input.memo?.trim() || null,
+    useful_life_months: numOrNull(input.useful_life_months),
+    salvage_value: numOrNull(input.salvage_value),
+    depreciation_method: input.depreciation_method || "STRAIGHT",
   } as never).select("id").single();
   if (error) return { ok: false, error: error.message };
   revalidatePath("/assets");
@@ -63,11 +70,13 @@ export async function updateAsset(id: string, input: AssetInput): Promise<Result
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   // 보유수량 변경 시 가용수량도 차이만큼 보정
-  const { data: cur } = await db.from("assets").select("total_qty, available_qty").eq("id", id).maybeSingle();
-  const c = cur as { total_qty: number; available_qty: number } | null;
+  const { data: cur } = await db.from("assets").select("total_qty, available_qty, status").eq("id", id).maybeSingle();
+  const c = cur as { total_qty: number; available_qty: number; status: string } | null;
   const newTotal = Math.max(0, int(input.total_qty, c?.total_qty ?? 1));
   const diff = newTotal - (c?.total_qty ?? newTotal);
   const newAvail = Math.max(0, (c?.available_qty ?? newTotal) + diff);
+  // 가용 0이어도 '수리중(REPAIR)'은 대여중으로 뒤집지 않고 보존
+  const newStatus = newAvail > 0 ? "AVAILABLE" : newTotal <= 0 ? "LOST" : c?.status === "REPAIR" ? "REPAIR" : "RENTED";
   const { error } = await db.from("assets").update({
     code: input.code?.trim() || null,
     name: input.name.trim(),
@@ -78,7 +87,10 @@ export async function updateAsset(id: string, input: AssetInput): Promise<Result
     purchase_price: numOrNull(input.purchase_price),
     purchase_date: input.purchase_date || null,
     memo: input.memo?.trim() || null,
-    status: newAvail <= 0 ? (newTotal <= 0 ? "LOST" : "RENTED") : "AVAILABLE",
+    useful_life_months: numOrNull(input.useful_life_months),
+    salvage_value: numOrNull(input.salvage_value),
+    depreciation_method: input.depreciation_method || "STRAIGHT",
+    status: newStatus,
     updated_at: new Date().toISOString(),
   } as never).eq("id", id);
   if (error) return { ok: false, error: error.message };

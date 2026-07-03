@@ -25,6 +25,7 @@ export const MENUS: MenuItem[] = [
   { href: "/cards", label: "카드원장", icon: "💳" },
   { href: "/paybacks", label: "페이백", icon: "💸" },
   { href: "/purchases", label: "구매 요청", icon: "🛒" },
+  { href: "/approvals", label: "전자결재", icon: "🗳️" },
   { href: "/assets", label: "교구·자산", icon: "🏐" },
   { href: "/sessions", label: "수업현황", icon: "🤸" },
   { href: "/events", label: "행사관리", icon: "🎪" },
@@ -44,7 +45,7 @@ export interface MenuGroup {
 export const MENU_GROUPS: MenuGroup[] = [
   { label: "운영", icon: "🏫", hrefs: ["/sessions", "/events", "/assets", "/calendar", "/notices"] },
   { label: "영업·고객", icon: "🤝", hrefs: ["/partners", "/students", "/sales"] },
-  { label: "회계", icon: "💰", hrefs: ["/daily", "/report", "/finance", "/purchases"] },
+  { label: "회계", icon: "💰", hrefs: ["/daily", "/report", "/finance", "/purchases", "/approvals"] },
   { label: "증빙·세무", icon: "🧾", hrefs: ["/tax-invoices", "/receipts", "/bank", "/cards", "/paybacks"] },
   { label: "인사", icon: "👥", hrefs: ["/employees", "/org", "/attendance", "/hr"] },
   { label: "문서", icon: "📄", hrefs: ["/documents", "/library"] },

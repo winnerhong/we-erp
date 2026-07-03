@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { ensureAdmin } from "@/lib/auth-guard";
 import { IMPORT_SPECS, type ImportKind, type ImportCtx } from "@/lib/import-specs";
+import { writeAudit, auditActor, diffPatch, guessLabel, redactRow } from "@/lib/audit";
 
 const PATH: Record<ImportKind, string> = {
   companies: "/companies",
@@ -26,8 +27,15 @@ export async function createRow(
   const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
-  const { error } = await db.from(IMPORT_SPECS[kind].table).insert(value as never);
+  const table = IMPORT_SPECS[kind].table;
+  const { data, error } = await db.from(table).insert(value as never).select("id").single();
   if (error) return { ok: false, error: error.message };
+  const newId = (data as { id: string } | null)?.id ?? null;
+  const companyId = (value.company_id as string | undefined) ?? (table === "companies" ? newId : null);
+  await writeAudit(db, {
+    companyId, actor: auditActor(g.profile), table, entityId: newId,
+    action: "CREATE", label: guessLabel(value), changes: redactRow(value),
+  });
   revalidatePath(PATH[kind]);
   revalidatePath("/");
   return { ok: true };
@@ -42,11 +50,19 @@ export async function updateRow(
   const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
-  const { error } = await db
-    .from(IMPORT_SPECS[kind].table)
-    .update(value as never)
-    .eq("id", id);
+  const table = IMPORT_SPECS[kind].table;
+  const { data: beforeData } = await db.from(table).select("*").eq("id", id).maybeSingle();
+  const before = (beforeData ?? null) as Record<string, unknown> | null;
+  const { error } = await db.from(table).update(value as never).eq("id", id);
   if (error) return { ok: false, error: error.message };
+  const changes = diffPatch(before, value);
+  if (Object.keys(changes).length > 0) {
+    const companyId = (value.company_id as string | undefined) ?? (before?.company_id as string | undefined) ?? (table === "companies" ? id : null);
+    await writeAudit(db, {
+      companyId, actor: auditActor(g.profile), table, entityId: id,
+      action: "UPDATE", label: guessLabel(before) ?? guessLabel(value), changes,
+    });
+  }
   revalidatePath(PATH[kind]);
   return { ok: true };
 }
@@ -68,8 +84,17 @@ export async function deleteRow(
   const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
-  const { error } = await db.from(IMPORT_SPECS[kind].table).delete().eq("id", id);
+  const table = IMPORT_SPECS[kind].table;
+  const { data: beforeData } = await db.from(table).select("*").eq("id", id).maybeSingle();
+  const before = (beforeData ?? null) as Record<string, unknown> | null;
+  const { error } = await db.from(table).delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
+  // 사업자 삭제 시엔 그 사업자가 이미 없어 FK가 안 걸리므로 company_id=null
+  const companyId = (before?.company_id as string | undefined) ?? null;
+  await writeAudit(db, {
+    companyId, actor: auditActor(g.profile), table, entityId: id,
+    action: "DELETE", label: guessLabel(before), changes: redactRow(before),
+  });
   revalidatePath(PATH[kind]);
   revalidatePath("/");
   return { ok: true };

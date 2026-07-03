@@ -35,14 +35,17 @@ export default async function ReportPage({
   let payQ = supabase.from("payrolls").select("base_pay, allowance, nontax_allowance").eq("year_month", month);
   let buyQ = supabase.from("purchase_requests").select("amount, receipt_id, account_id").eq("status", "PURCHASED").gte("paid_at", `${first}T00:00:00`).lt("paid_at", `${next}T00:00:00`);
   const acctQ = supabase.from("accounts").select("id, code, name");
+  // 부문별 매출(거래 기준) — 원가배분 기준
+  let txnQ = supabase.from("transactions").select("type, amount, status").neq("status", "CANCELED").gte("txn_date", first).lt("txn_date", next);
   if (filter) {
     taxQ = taxQ.eq("company_id", filter);
     rcptQ = rcptQ.eq("company_id", filter);
     payQ = payQ.eq("company_id", filter);
     buyQ = buyQ.eq("company_id", filter);
+    txnQ = txnQ.eq("company_id", filter);
   }
-  const [{ data: tax }, { data: rcpt }, { data: pay }, { data: buy }, { data: accts }] = await Promise.all([
-    taxQ, rcptQ, payQ, buyQ, acctQ,
+  const [{ data: tax }, { data: rcpt }, { data: pay }, { data: buy }, { data: accts }, { data: txnData }] = await Promise.all([
+    taxQ, rcptQ, payQ, buyQ, acctQ, txnQ,
   ]);
 
   type Tax = { type: string; supply_amount: number; vat_amount: number; receipt_id: string | null; account_id: string | null };
@@ -93,6 +96,28 @@ export default async function ReportPage({
     { label: "급여", amount: payrollCost },
     { label: "구매 (증빙 미연결)", amount: purchaseUnevidenced },
   ].filter((p) => p.amount !== 0);
+
+  // ----- 부문별 원가배분(공통비를 거래 매출 비중으로 배분) -----
+  const deptRev: Record<string, number> = { CLASS: 0, EVENT: 0, RENTAL: 0, ETC: 0 };
+  for (const t of (txnData ?? []) as { type: string; amount: number }[]) {
+    const k = t.type === "CLASS" || t.type === "EVENT" || t.type === "RENTAL" ? t.type : "ETC";
+    deptRev[k] += t.amount ?? 0;
+  }
+  const deptTotal = deptRev.CLASS + deptRev.EVENT + deptRev.RENTAL + deptRev.ETC;
+  const deptMeta = [
+    { key: "CLASS", label: "수업" },
+    { key: "EVENT", label: "행사" },
+    { key: "RENTAL", label: "렌탈" },
+    { key: "ETC", label: "기타" },
+  ];
+  const allocation = deptMeta
+    .map((d) => {
+      const rev = deptRev[d.key];
+      const share = deptTotal > 0 ? rev / deptTotal : 0;
+      const cost = Math.round(expenseTotal * share);
+      return { label: d.label, rev, share, cost, profit: rev - cost };
+    })
+    .filter((d) => d.rev !== 0 || d.cost !== 0);
 
   // ----- 올해 월별 순이익 추이 -----
   const year = Number(month.slice(0, 4));
@@ -225,6 +250,50 @@ export default async function ReportPage({
           )}
         </Card>
       </div>
+
+      {/* 부문별 원가배분 손익 */}
+      <h2 className="mb-2 mt-6 flex items-center gap-2 text-sm font-semibold text-neutral-700">
+        부문별 손익 <span className="text-xs font-normal text-neutral-400">공통비를 거래 매출 비중으로 배분</span>
+      </h2>
+      <Card className="overflow-hidden">
+        {allocation.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-neutral-400">이 달 부문 거래가 없습니다.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[520px] text-right text-sm">
+              <thead className="border-b border-neutral-200 bg-neutral-50 text-xs text-neutral-500">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-medium">부문</th>
+                  <th className="px-4 py-2.5 font-medium">매출(거래)</th>
+                  <th className="px-4 py-2.5 font-medium">매출 비중</th>
+                  <th className="px-4 py-2.5 font-medium">배분 공통비</th>
+                  <th className="px-4 py-2.5 font-medium">부문 순이익</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {allocation.map((d) => (
+                  <tr key={d.label}>
+                    <td className="px-4 py-2.5 text-left font-medium text-neutral-800">{d.label}</td>
+                    <td className="px-4 py-2.5 tabular text-neutral-700">{krw(d.rev)}</td>
+                    <td className="px-4 py-2.5 tabular text-neutral-500">{Math.round(d.share * 100)}%</td>
+                    <td className="px-4 py-2.5 tabular text-rose-600">−{krw(d.cost)}</td>
+                    <td className={`px-4 py-2.5 tabular font-semibold ${d.profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{krw(d.profit)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="border-t border-neutral-200 bg-neutral-50 text-xs">
+                <tr>
+                  <td className="px-4 py-2 text-left font-semibold text-neutral-600">합계</td>
+                  <td className="px-4 py-2 tabular font-semibold">{krw(deptTotal)}</td>
+                  <td className="px-4 py-2 tabular text-neutral-400">100%</td>
+                  <td className="px-4 py-2 tabular font-semibold text-rose-600">−{krw(expenseTotal)}</td>
+                  <td className="px-4 py-2 tabular font-semibold">{krw(deptTotal - expenseTotal)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </Card>
 
       {/* 올해 월별 순이익 추이 */}
       <h2 className="mb-2 mt-6 text-sm font-semibold text-neutral-700">{year}년 월별 순이익</h2>

@@ -7,12 +7,14 @@ import { NumberInput } from "@/components/ui";
 import { krw } from "@/lib/labels";
 import { ASSET_STATUS_LABEL, ASSET_STATUS_TONE, MOVE_TYPES, MOVE_TYPE_LABEL, MOVE_TYPE_TONE, assetChip, qrImageUrl } from "@/lib/assets";
 import type { MoveType } from "@/lib/assets";
-import { logMovement, deleteAsset, deleteMovement } from "../actions";
+import { logMovement, deleteAsset, deleteMovement, updateAsset } from "../actions";
+import { computeDepreciation } from "@/lib/depreciation";
 
 interface AssetView {
   id: string; code: string | null; name: string; category: string | null;
   totalQty: number; availableQty: number; status: string; location: string | null;
   purchasePrice: number | null; purchaseDate: string | null; memo: string | null;
+  usefulLifeMonths: number | null; salvageValue: number | null; depreciationMethod: string | null;
 }
 export interface MoveItem {
   id: string; type: string; qty: number; txnDate: string; dueDate: string | null; status: string;
@@ -20,6 +22,16 @@ export interface MoveItem {
 }
 type NameItem = { id: string; name: string };
 const inputCls = "w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none";
+
+function DepStat({ label, value, tone }: { label: string; value: string; tone?: "rose" | "emerald" }) {
+  const c = tone === "rose" ? "text-rose-600" : tone === "emerald" ? "text-emerald-600" : "text-neutral-800";
+  return (
+    <div className="rounded-xl bg-neutral-50 px-3 py-2.5">
+      <p className="text-[11px] text-neutral-400">{label}</p>
+      <p className={`mt-0.5 font-bold tabular-nums ${c}`}>{value}</p>
+    </div>
+  );
+}
 
 export function AssetDetailClient({
   asset, movements, partners, employees,
@@ -38,6 +50,33 @@ export function AssetDetailClient({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [due, setDue] = useState("");
   const [memo, setMemo] = useState("");
+
+  // 감가상각(정액법) — 오늘 기준 계산 + 설정 편집
+  const asOf = new Date().toISOString().slice(0, 10);
+  const dep = computeDepreciation(
+    { purchasePrice: asset.purchasePrice, purchaseDate: asset.purchaseDate, usefulLifeMonths: asset.usefulLifeMonths, salvageValue: asset.salvageValue, method: asset.depreciationMethod },
+    asOf
+  );
+  const [depOpen, setDepOpen] = useState(false);
+  const [dPrice, setDPrice] = useState(asset.purchasePrice?.toString() ?? "");
+  const [dDate, setDDate] = useState(asset.purchaseDate ?? "");
+  const [dLife, setDLife] = useState(asset.usefulLifeMonths?.toString() ?? "");
+  const [dSalvage, setDSalvage] = useState(asset.salvageValue?.toString() ?? "");
+
+  function saveDep() {
+    startTransition(async () => {
+      const r = await updateAsset(asset.id, {
+        company_id: null,
+        name: asset.name, code: asset.code, category: asset.category,
+        total_qty: asset.totalQty, location: asset.location, memo: asset.memo,
+        purchase_price: dPrice, purchase_date: dDate || null,
+        useful_life_months: dLife, salvage_value: dSalvage, depreciation_method: "STRAIGHT",
+      });
+      if (!r.ok) { alert(r.error ?? "저장 실패"); return; }
+      setDepOpen(false);
+      router.refresh();
+    });
+  }
 
   function submit() {
     startTransition(async () => {
@@ -80,6 +119,52 @@ export function AssetDetailClient({
           </div>
         </div>
         <button onClick={removeAsset} className="rounded-lg px-3 py-1.5 text-sm font-medium text-rose-500 hover:bg-rose-50">🗑 삭제</button>
+      </div>
+
+      {/* 감가상각(정액법) */}
+      <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="font-semibold text-neutral-800">📉 감가상각 <span className="text-xs font-normal text-neutral-400">정액법</span></h3>
+          <button onClick={() => setDepOpen((v) => !v)} className="rounded-lg border border-neutral-300 px-3 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50">
+            {depOpen ? "닫기" : "⚙ 설정"}
+          </button>
+        </div>
+
+        {depOpen && (
+          <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 sm:grid-cols-4">
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">취득가</span><NumberInput value={dPrice} onChange={setDPrice} className="w-full" /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">취득일</span><input type="date" className={inputCls} value={dDate} onChange={(e) => setDDate(e.target.value)} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">내용연수(개월)</span><NumberInput value={dLife} onChange={setDLife} className="w-full" /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">잔존가치</span><NumberInput value={dSalvage} onChange={setDSalvage} className="w-full" /></label>
+            <div className="col-span-2 flex justify-end gap-2 sm:col-span-4">
+              <button onClick={() => setDepOpen(false)} className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm hover:bg-neutral-50">취소</button>
+              <button onClick={saveDep} disabled={pending} className="rounded-lg bg-indigo-500 px-4 py-1.5 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">저장</button>
+            </div>
+          </div>
+        )}
+
+        {!dep.applicable ? (
+          <p className="text-sm text-neutral-400">취득가·취득일·내용연수를 입력하면 월 상각액과 장부가가 계산됩니다. (⚙ 설정)</p>
+        ) : (
+          <div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+              <DepStat label="취득가" value={krw(dep.cost)} />
+              <DepStat label="월 상각액" value={krw(dep.monthly)} />
+              <DepStat label="경과" value={`${dep.monthsElapsed} / ${dep.life}개월`} />
+              <DepStat label="누적 상각" value={krw(dep.accumulated)} tone="rose" />
+              <DepStat label="장부가" value={krw(dep.bookValue)} tone="emerald" />
+            </div>
+            <div className="mt-3">
+              <div className="mb-1 flex items-center justify-between text-xs text-neutral-400">
+                <span>상각 진행 {Math.round(dep.progress * 100)}%{dep.fullyDepreciated && " · 상각완료"}</span>
+                {dep.salvage > 0 && <span>잔존 {krw(dep.salvage)}</span>}
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-neutral-100">
+                <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.min(100, Math.round(dep.progress * 100))}%` }} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 이동 기록 입력 */}

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureUser } from "@/lib/auth-guard";
 import { parseBankRow, bankSourceRef } from "@/lib/bank-import";
 import { matchGroupId } from "@/lib/bank-groups";
+import { periodLockError, periodOf } from "@/lib/period-lock";
 import type { BankAccountRow, BankTransactionRow } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -61,6 +62,8 @@ export async function addTransaction(
   const g = await ensureUser();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const lockErr = await periodLockError(db, value.company_id, value.txn_date);
+  if (lockErr) return { ok: false, error: lockErr };
   // 수기 입력은 source_ref 없이(중복 허용)
   const { error } = await db.from("bank_transactions").insert({ ...value, source_ref: null } as never);
   if (error) return { ok: false, error: error.message };
@@ -76,6 +79,18 @@ export async function updateTransaction(
   const g = await ensureUser();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  // 마감 가드 — 원 거래 기간(및 날짜 이동 시 대상 기간)이 잠겨있으면 차단
+  const { data: cur } = await db.from("bank_transactions").select("company_id, txn_date").eq("id", id).maybeSingle();
+  const c = cur as { company_id: string; txn_date: string } | null;
+  if (c) {
+    const oldErr = await periodLockError(db, c.company_id, c.txn_date);
+    if (oldErr) return { ok: false, error: oldErr };
+    const newDate = patch.txn_date as string | undefined;
+    if (newDate && newDate !== c.txn_date) {
+      const newErr = await periodLockError(db, (patch.company_id as string) ?? c.company_id, newDate);
+      if (newErr) return { ok: false, error: newErr };
+    }
+  }
   const { error } = await db.from("bank_transactions").update(patch as never).eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/bank");
@@ -87,6 +102,12 @@ export async function deleteTransaction(id: string): Promise<Result> {
   const g = await ensureUser();
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const { data: cur } = await db.from("bank_transactions").select("company_id, txn_date").eq("id", id).maybeSingle();
+  const c = cur as { company_id: string; txn_date: string } | null;
+  if (c) {
+    const lockErr = await periodLockError(db, c.company_id, c.txn_date);
+    if (lockErr) return { ok: false, error: lockErr };
+  }
   const { error } = await db.from("bank_transactions").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/bank");
@@ -523,8 +544,20 @@ export async function bulkImportTransactions(
       .eq("bank_account_id", bankAccountId)
       .in("source_ref", refs);
     const have = new Set((existing ?? []).map((e) => (e as { source_ref: string }).source_ref));
-    const fresh = toInsert.filter((r) => !have.has(r.source_ref as string));
+    let fresh = toInsert.filter((r) => !have.has(r.source_ref as string));
     skipped = toInsert.length - fresh.length;
+
+    // 마감된 기간의 행은 등록 제외
+    const { data: lockRows } = await db.from("period_locks").select("period").eq("company_id", companyId);
+    const lockedPeriods = new Set(((lockRows ?? []) as { period: string }[]).map((r) => r.period));
+    if (lockedPeriods.size > 0) {
+      const beforeLen = fresh.length;
+      fresh = fresh.filter((r) => {
+        const p = periodOf(r.txn_date as string);
+        return !(p && lockedPeriods.has(p));
+      });
+      skipped += beforeLen - fresh.length;
+    }
 
     // 정기거래 그룹 자동 매칭 — 이름이 그룹 키워드에 걸리면 group_id + 기본값(거래처·계정·구분) 자동 적용.
     // (그룹 테이블 미적용 시 select 실패 → groups 비어 안전하게 건너뜀)

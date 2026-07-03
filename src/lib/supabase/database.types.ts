@@ -45,6 +45,13 @@ export interface CompanyRow extends Timestamps {
   address: string | null;
   tax_type: TaxType;
   is_active: boolean;
+  // 멀티테넌시(대리업무) — 20260732
+  relation_type: string;              // OWNED(자사) / MANAGED(수임)
+  corp_num: string | null;            // Popbill CorpNum
+  managed_scope: string[] | null;     // 위임 항목
+  managed_start: string | null;
+  managed_end: string | null;
+  client_memo: string | null;
 }
 
 export interface AccountRow extends Timestamps {
@@ -493,6 +500,59 @@ export interface BankTransactionRow extends Timestamps {
   group_id: string | null; // 정기거래 그룹(bank_txn_groups.id)
 }
 
+// 결산·마감(20260731)
+export interface PeriodLockRow {
+  id: string;
+  company_id: string;
+  period: string;              // 'YYYY-MM'
+  locked_by: string | null;
+  locked_by_name: string | null;
+  memo: string | null;
+  created_at: string;
+}
+
+// 전자결재(20260730)
+export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELED";
+export interface ApprovalRow {
+  id: string;
+  company_id: string | null;
+  doc_type: string;          // GENERAL/EXPENSE/PURCHASE/LEAVE
+  title: string;
+  amount: number | null;
+  content: string | null;
+  requester_id: string | null;
+  requester_name: string | null;
+  status: ApprovalStatus;
+  current_step: number;
+  created_at: string;
+  updated_at: string;
+}
+export interface ApprovalStepRow {
+  id: string;
+  approval_id: string;
+  step_order: number;
+  approver_id: string | null;
+  approver_name: string | null;
+  status: "WAITING" | "APPROVED" | "REJECTED";
+  comment: string | null;
+  acted_at: string | null;
+  created_at: string;
+}
+
+// 감사추적(20260728)
+export interface AuditLogRow {
+  id: string;
+  company_id: string | null;
+  actor_id: string | null;
+  actor_name: string | null;
+  entity_table: string;
+  entity_id: string | null;
+  action: "CREATE" | "UPDATE" | "DELETE";
+  label: string | null;
+  changes: Record<string, { from: unknown; to: unknown }> | Record<string, unknown> | null;
+  created_at: string;
+}
+
 // 통장 정기거래 그룹(20260727)
 export interface BankTxnGroupRow extends Timestamps {
   id: string;
@@ -732,6 +792,9 @@ export interface AssetRow {
   purchase_price: number | null;
   purchase_date: string | null;
   memo: string | null;
+  useful_life_months: number | null;  // 내용연수(개월) — 감가상각(20260729)
+  salvage_value: number | null;       // 잔존가치
+  depreciation_method: string | null; // STRAIGHT
   created_at: string;
   updated_at: string;
 }
@@ -792,6 +855,10 @@ export interface Database {
         "bank_account_id" | "company_id" | "txn_date" | "direction"
       >;
       bank_txn_groups: TableShape<BankTxnGroupRow, "company_id" | "name">;
+      audit_logs: TableShape<AuditLogRow, "entity_table" | "action">;
+      approvals: TableShape<ApprovalRow, "title" | "doc_type">;
+      approval_steps: TableShape<ApprovalStepRow, "approval_id" | "step_order">;
+      period_locks: TableShape<PeriodLockRow, "company_id" | "period">;
       cards: TableShape<CardRow, "company_id" | "alias">;
       card_transactions: TableShape<
         CardTransactionRow,

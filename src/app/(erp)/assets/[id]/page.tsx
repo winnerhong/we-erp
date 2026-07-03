@@ -35,6 +35,7 @@ export default async function AssetDetailPage({ params }: { params: Promise<{ id
         id: asset.id, code: asset.code, name: asset.name, category: asset.category,
         totalQty: asset.total_qty, availableQty: asset.available_qty, status: asset.status,
         location: asset.location, purchasePrice: asset.purchase_price, purchaseDate: asset.purchase_date, memo: asset.memo,
+        usefulLifeMonths: asset.useful_life_months, salvageValue: asset.salvage_value, depreciationMethod: asset.depreciation_method,
       }}
       movements={movements}
       partners={partners}

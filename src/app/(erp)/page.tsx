@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCompanyContext, companyFilter, ALL_COMPANIES } from "@/lib/active-company";
 import { Card, Badge } from "@/components/ui";
 import { krw } from "@/lib/labels";
+import { summarizeAging, type AgingItem } from "@/lib/aging";
 
 export const metadata = { title: "대시보드" };
 
@@ -65,14 +66,13 @@ export default async function DashboardPage() {
   const openRentQ = scope(supabase.from("asset_movements").select("id", { count: "exact", head: true }).eq("status", "OPEN"));
   const expireQ = scope(supabase.from("contracts").select("id", { count: "exact", head: true }).eq("status", "ACTIVE").gte("end_date", today).lte("end_date", d30s));
   const eventQ = scope(supabase.from("contracts").select("detail, status").eq("type", "EVENT").neq("status", "ENDED"));
-  const settledQ = scope(supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null));
   const tTrendQ = scope(supabase.from("tax_invoices").select("type,total_amount,doc_date").gte("doc_date", sixStart).lt("doc_date", next));
   const rTrendQ = scope(supabase.from("receipts").select("total_amount,doc_date,status").eq("status", "CONFIRMED").gte("doc_date", sixStart).lt("doc_date", next));
 
   // ---- 단일 병렬 로드(독립 쿼리 전부 한 번에) ----
   const [
     companiesRes, rcpt, tax, pur, lv, partnerCnt, empCnt, acctCnt,
-    attRes, taskRes, txnRes, setRes, openRentRes, expireRes, eventRes, settledRes, tTrend, rTrend,
+    attRes, taskRes, txnRes, setRes, openRentRes, expireRes, eventRes, tTrend, rTrend,
   ] = await Promise.all([
     supabase.from("companies").select("id,name").eq("is_active", true).order("name"),
     rcptQ, taxQ, purQ, lvQ,
@@ -83,7 +83,7 @@ export default async function DashboardPage() {
       ? supabase.from("employees").select("*", { count: "exact", head: true }).eq("is_active", true).eq("company_id", filter)
       : supabase.from("employees").select("*", { count: "exact", head: true }).eq("is_active", true),
     supabase.from("accounts").select("*", { count: "exact", head: true }).eq("is_active", true),
-    attTodayQ, taskQ, txnQ, setQ, openRentQ, expireQ, eventQ, settledQ, tTrendQ, rTrendQ,
+    attTodayQ, taskQ, txnQ, setQ, openRentQ, expireQ, eventQ, tTrendQ, rTrendQ,
   ]);
 
   const companies = (companiesRes.data ?? []) as { id: string; name: string }[];
@@ -118,8 +118,14 @@ export default async function DashboardPage() {
   }).length;
   const hasOps = (openRentals ?? 0) > 0 || (expiringContracts ?? 0) > 0 || upcomingEvents > 0;
 
-  // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용
-  const settledIds = new Set(((settledRes.data ?? []) as { tax_invoice_id: string }[]).map((b) => b.tax_invoice_id));
+  // 정산(통장 연결) 완료된 세금계산서 id — 미수금/미지급 계산용. 페이지네이션(1000행 캡 회피).
+  const settledIds = new Set<string>();
+  for (let from = 0; from < 500000; from += 1000) {
+    const { data } = await scope(supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null)).range(from, from + 999);
+    const batch = (data ?? []) as { tax_invoice_id: string }[];
+    for (const b of batch) settledIds.add(b.tax_invoice_id);
+    if (batch.length < 1000) break;
+  }
 
   // ----- 최근 6개월 추세(매출 vs 지출) -----
   const salesBy: Record<string, number> = {};
@@ -187,6 +193,18 @@ export default async function DashboardPage() {
     total.receiptPending + total.salesPending + total.purchasePending +
     total.purchaseReqPending + total.leavePending + total.overdue;
 
+  // 연령분석(전체 미결제) — tax.data 재사용(추가 쿼리 없음)
+  const agingItems: AgingItem[] = [];
+  for (const t of (tax.data ?? []) as T[]) {
+    if (settledIds.has(t.id) || t.settled_at) continue;
+    agingItems.push({
+      amount: t.total_amount,
+      ref: t.due_date ?? t.doc_date ?? null,
+      type: t.type === "SALES" ? "SALES" : "PURCHASE",
+    });
+  }
+  const aging = summarizeAging(agingItems, today);
+
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-baseline justify-between gap-2">
@@ -233,6 +251,32 @@ export default async function DashboardPage() {
               tone={total.payable > 0 ? "red" : undefined}
             />
           </div>
+
+          {/* 연령분석 요약 — 전체 미결제(월 무관) */}
+          {aging.recvCount + aging.payCount > 0 && (
+            <div className="mt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-neutral-700">연령분석 · 전체 미결제</h2>
+                <Link href="/finance" className="text-xs font-medium text-indigo-500 hover:underline">받을돈·줄돈 →</Link>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <AgingMini
+                  title="받을 돈"
+                  total={aging.recvTotal}
+                  overdue={aging.recvOverdue}
+                  tone="emerald"
+                  buckets={aging.buckets.map((b) => ({ label: b.label, amt: b.recv, over: b.key !== "notdue" }))}
+                />
+                <AgingMini
+                  title="줄 돈"
+                  total={aging.payTotal}
+                  overdue={aging.payOverdue}
+                  tone="rose"
+                  buckets={aging.buckets.map((b) => ({ label: b.label, amt: b.pay, over: b.key !== "notdue" }))}
+                />
+              </div>
+            </div>
+          )}
 
           {/* 오늘 근태 */}
           <div className="mt-7 flex items-center justify-between">
@@ -445,5 +489,35 @@ function Todo({ label, n, href }: { label: string; n: number; href: string }) {
         <p className={`mt-1 text-lg font-bold tabular ${n > 0 ? "text-red-600" : "text-neutral-300"}`}>{n}</p>
       </Card>
     </Link>
+  );
+}
+
+function AgingMini({
+  title, total, overdue, tone, buckets,
+}: {
+  title: string; total: number; overdue: number; tone: "emerald" | "rose";
+  buckets: { label: string; amt: number; over: boolean }[];
+}) {
+  const color = tone === "emerald" ? "text-emerald-700" : "text-rose-700";
+  const shown = buckets.filter((b) => b.amt > 0);
+  return (
+    <Card className="p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs text-neutral-500">{title} · 미결제</p>
+        {overdue > 0 && <span className="text-[11px] font-medium text-rose-600">연체 {krw(overdue)}</span>}
+      </div>
+      <p className={`mt-1 text-lg font-bold tabular ${color}`}>{krw(total)}</p>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {shown.length === 0 ? (
+          <span className="text-[11px] text-neutral-400">없음</span>
+        ) : (
+          shown.map((b, i) => (
+            <span key={i} className={`rounded px-1.5 py-0.5 text-[10px] tabular ${b.over ? "bg-rose-50 text-rose-600" : "bg-neutral-100 text-neutral-500"}`}>
+              {b.label} {krw(b.amt)}
+            </span>
+          ))
+        )}
+      </div>
+    </Card>
   );
 }
