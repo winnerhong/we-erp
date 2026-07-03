@@ -53,6 +53,30 @@ export async function ensureCompanyAccess(companyId: string | null | undefined):
   return g;
 }
 
+/** by-id 쓰기 심층방어: 대상 행의 company_id 를 조회해 회사 접근을 검증.
+ *  행이 없으면(이미 삭제 등) 통과 — 후속 update/delete 가 어차피 no-op. company_id 컬럼 테이블 전용. */
+export async function guardCompanyRow(table: string, id: string): Promise<Guard> {
+  const db = createAdminClient();
+  const { data } = await db.from(table).select("company_id").eq("id", id).maybeSingle();
+  const cid = (data as { company_id: string | null } | null)?.company_id ?? null;
+  return ensureCompanyAccess(cid);
+}
+
+/** by-id 다건 쓰기 심층방어: 대상 행들의 서로 다른 company_id 를 모두 접근가능해야 통과. */
+export async function guardCompanyRows(table: string, ids: string[]): Promise<Guard> {
+  const g = await ensureUser();
+  if (g.error) return g;
+  if (g.profile!.role === "ADMIN" || ids.length === 0) return g;
+  const db = createAdminClient();
+  const { data } = await db.from(table).select("company_id").in("id", ids);
+  const cids = Array.from(new Set(((data ?? []) as { company_id: string | null }[]).map((r) => r.company_id)));
+  for (const cid of cids) {
+    const acc = await ensureCompanyAccess(cid);
+    if (acc.error) return acc;
+  }
+  return g;
+}
+
 export interface SelfGuard {
   profile?: ProfileRow;
   employee?: EmployeeRow;

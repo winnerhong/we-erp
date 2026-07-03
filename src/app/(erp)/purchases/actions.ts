@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchLinkPreview, type LinkPreview } from "@/lib/link-preview";
 import { AUTO_APPROVE_LIMIT } from "@/lib/labels";
-import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess, guardCompanyRow, guardCompanyRows } from "@/lib/auth-guard";
 import type {
   PurchaseRequestRow,
   PurchaseStatus,
@@ -61,7 +61,7 @@ export async function reviewPurchase(
   status: Extract<PurchaseStatus, "APPROVED" | "REJECTED" | "ON_HOLD" | "PENDING">,
   note?: string
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("purchase_requests", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db
@@ -80,7 +80,7 @@ export async function markPurchased(
   paymentMethod: PaymentMethod | null,
   bankAccountId?: string | null
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("purchase_requests", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
 
@@ -138,7 +138,7 @@ export async function bulkReviewPurchases(
   status: Extract<PurchaseStatus, "APPROVED" | "REJECTED" | "ON_HOLD">,
   note?: string
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRows("purchase_requests", ids);
   if (g.error) return { ok: false, error: g.error };
   if (ids.length === 0) return { ok: true };
   const db = createAdminClient();
@@ -154,7 +154,7 @@ export async function bulkReviewPurchases(
 
 /** 선택 구매건 일괄 삭제. */
 export async function bulkDeletePurchases(ids: string[]): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRows("purchase_requests", ids);
   if (g.error) return { ok: false, error: g.error };
   if (ids.length === 0) return { ok: true };
   const db = createAdminClient();
@@ -169,7 +169,7 @@ export async function updatePurchase(
   id: string,
   patch: Partial<PurchaseRequestRow>
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("purchase_requests", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("purchase_requests").update(patch as never).eq("id", id);
@@ -183,7 +183,7 @@ export async function linkPurchaseReceipt(
   id: string,
   receiptId: string | null
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("purchase_requests", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db
@@ -196,7 +196,7 @@ export async function linkPurchaseReceipt(
 }
 
 export async function deletePurchase(id: string): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("purchase_requests", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("purchase_requests").delete().eq("id", id);

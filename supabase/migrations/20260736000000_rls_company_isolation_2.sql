@@ -8,9 +8,12 @@ declare
   t   text;
   pol text;
   has_col boolean;
+  -- ※ 실재 테이블만. (초기 목록의 documents/asset_categories/payroll_items 는
+  --    존재하지 않는 이름이라 has_col=false 로 건너뛰어졌음 → 목록에서 제거해 정합성 유지.
+  --    실제 문서=document_issues, 급여=payrolls, 자산카테고리=field_options 는 Stage1(20260734)에서 커버됨.)
   tables text[] := array[
-    'notices','students','tasks','employment_certificates','documents',
-    'library_files','asset_categories','audit_logs','payroll_items'
+    'notices','students','tasks','employment_certificates',
+    'library_files','audit_logs'
   ];
 begin
   foreach t in array tables loop

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
+import { ensureCompanyAccess, guardCompanyRow } from "@/lib/auth-guard";
 import { availableDelta, totalDelta } from "@/lib/assets";
 import type { AssetRow } from "@/lib/supabase/database.types";
 
@@ -66,7 +66,7 @@ export async function createAsset(input: AssetInput): Promise<Result> {
 }
 
 export async function updateAsset(id: string, input: AssetInput): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("assets", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   // 보유수량 변경 시 가용수량도 차이만큼 보정
@@ -100,7 +100,7 @@ export async function updateAsset(id: string, input: AssetInput): Promise<Result
 }
 
 export async function deleteAsset(id: string): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("assets", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("assets").delete().eq("id", id);
@@ -122,7 +122,7 @@ export interface MovementInput {
 
 /** 입출고·대여·반납·수리·폐기 기록 → 자산 수량·상태 자동 반영. */
 export async function logMovement(input: MovementInput): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("assets", input.asset_id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { data: a } = await db.from("assets").select("*").eq("id", input.asset_id).maybeSingle();
@@ -154,7 +154,7 @@ export async function logMovement(input: MovementInput): Promise<Result> {
 }
 
 export async function deleteMovement(id: string): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("asset_movements", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   // 이동 삭제 시 자산 수량 원복

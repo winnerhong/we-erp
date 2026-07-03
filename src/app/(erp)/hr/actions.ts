@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { estimateInsurance, computeNet } from "@/lib/payroll";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess, guardCompanyRow } from "@/lib/auth-guard";
 import type {
   LeaveRequestRow,
   LeaveStatus,
@@ -252,17 +252,23 @@ export async function generatePayrolls(
 
 // ---------- 근로계약서 ----------
 export async function createContract(v: Partial<LaborContractRow> & { employee_id: string }): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
-  const { error } = await db.from("labor_contracts").insert(v as never);
+  // 근로계약의 소속 사업자 = 직원의 소속 사업자로 보정(멀티테넌시 격리·RLS 전제)
+  let companyId = v.company_id ?? null;
+  if (!companyId && v.employee_id) {
+    const { data: emp } = await db.from("employees").select("company_id").eq("id", v.employee_id).maybeSingle();
+    companyId = (emp as { company_id: string | null } | null)?.company_id ?? null;
+  }
+  const g = await ensureCompanyAccess(companyId);
+  if (g.error) return { ok: false, error: g.error };
+  const { error } = await db.from("labor_contracts").insert({ ...v, company_id: companyId } as never);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/employees");
   return { ok: true };
 }
 
 export async function deleteContract(id: string): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("labor_contracts", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("labor_contracts").delete().eq("id", id);

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
+import { ensureCompanyAccess, guardCompanyRow, guardCompanyRows } from "@/lib/auth-guard";
 import { parseCardRow, cardSourceRef } from "@/lib/card-import";
 import type { CardRow, CardTransactionRow } from "@/lib/supabase/database.types";
 
@@ -25,7 +25,7 @@ export async function createCard(
 }
 
 export async function updateCard(id: string, patch: Partial<CardRow>): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("cards", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("cards").update(patch as never).eq("id", id);
@@ -35,7 +35,7 @@ export async function updateCard(id: string, patch: Partial<CardRow>): Promise<R
 }
 
 export async function deleteCard(id: string): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("cards", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("cards").delete().eq("id", id); // 사용내역은 FK cascade
@@ -63,7 +63,7 @@ export async function updateCardTxn(
   id: string,
   patch: Partial<CardTransactionRow>
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("card_transactions", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("card_transactions").update(patch as never).eq("id", id);
@@ -73,7 +73,7 @@ export async function updateCardTxn(
 }
 
 export async function deleteCardTxn(id: string): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("card_transactions", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("card_transactions").delete().eq("id", id);
@@ -84,7 +84,7 @@ export async function deleteCardTxn(id: string): Promise<Result> {
 
 /** 선택 행 일괄 수정(거래처·계정·구분 등 공용). */
 export async function bulkUpdateCardTxns(ids: string[], patch: Partial<CardTransactionRow>): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRows("card_transactions", ids);
   if (g.error) return { ok: false, error: g.error };
   if (ids.length === 0) return { ok: true };
   const db = createAdminClient();
@@ -95,7 +95,7 @@ export async function bulkUpdateCardTxns(ids: string[], patch: Partial<CardTrans
 }
 
 export async function bulkDeleteCardTxns(ids: string[]): Promise<Result> {
-  const g = await ensureUser();
+  const g = await guardCompanyRows("card_transactions", ids);
   if (g.error) return { ok: false, error: g.error };
   if (ids.length === 0) return { ok: true };
   const db = createAdminClient();
@@ -118,7 +118,7 @@ export async function bulkImportCardTxns(
   cardId: string,
   rawRows: Record<string, string>[]
 ): Promise<CardBulkResult> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("cards", cardId);
   if (g.error) return { ok: false, error: g.error, inserted: 0, skipped: 0, failed: [] };
 
   const db = createAdminClient();

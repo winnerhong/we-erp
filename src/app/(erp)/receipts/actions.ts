@@ -11,7 +11,7 @@ import {
 } from "@/lib/ocr";
 import { defaultVatDeductible } from "@/lib/labels";
 import { normalizeBizNo } from "@/lib/validation";
-import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
+import { ensureCompanyAccess, guardCompanyRow } from "@/lib/auth-guard";
 import type { ReceiptRow } from "@/lib/supabase/database.types";
 
 const BUCKET = "receipts";
@@ -121,7 +121,7 @@ export async function updateReceipt(
   id: string,
   patch: Partial<ReceiptRow>
 ): Promise<{ ok: boolean; error?: string }> {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("receipts", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("receipts").update(patch as never).eq("id", id);
@@ -167,7 +167,7 @@ export async function confirmReceipt(id: string) {
 
 /** 삭제 (Storage 객체도 함께 제거). */
 export async function deleteReceipt(id: string, imagePath: string) {
-  const g = await ensureUser();
+  const g = await guardCompanyRow("receipts", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   await db.storage.from(BUCKET).remove([imagePath]);

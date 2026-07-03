@@ -199,6 +199,8 @@ export async function generateMonthlyClassTxns(contractId: string, month: string
   const { data: c } = await db.from("contracts").select("*").eq("id", contractId).maybeSingle();
   const contract = c as ContractRow | null;
   if (!contract) return { ok: false, error: "계약을 찾을 수 없습니다" };
+  const acc = await ensureCompanyAccess(contract.company_id);
+  if (acc.error) return { ok: false, error: acc.error };
 
   const detail = contract.detail ?? {};
   const dowsRaw = (detail.dows ?? detail.dow) as unknown;
@@ -256,6 +258,8 @@ export async function generateMonthlySettlement(partnerId: string, month: string
 
   const { data: p } = await db.from("partners").select("company_id, name, tax_category, default_tax_rate").eq("id", partnerId).maybeSingle();
   const partner = p as PartnerTaxInfo | null;
+  const acc = await ensureCompanyAccess(partner?.company_id ?? null);
+  if (acc.error) return { ok: false, error: acc.error };
   const subtotal = list.reduce((s, t) => s + t.amount, 0);
   const { tax, total } = calcTax(subtotal, partner?.tax_category ?? null, partner?.default_tax_rate ?? null);
 
@@ -285,6 +289,8 @@ export async function createSettlementFromTxns(partnerId: string, txnIds: string
 
   const { data: p } = await db.from("partners").select("company_id, name, tax_category, default_tax_rate").eq("id", partnerId).maybeSingle();
   const partner = p as PartnerTaxInfo | null;
+  const acc = await ensureCompanyAccess(partner?.company_id ?? null);
+  if (acc.error) return { ok: false, error: acc.error };
   const subtotal = list.reduce((s, t) => s + t.amount, 0);
   const { tax, total } = calcTax(subtotal, partner?.tax_category ?? null, partner?.default_tax_rate ?? null);
 
@@ -301,9 +307,9 @@ export async function createSettlementFromTxns(partnerId: string, txnIds: string
 
 /** 정산 상태 변경(미발행/발행/입금) — 타임스탬프 동기화. */
 export async function updateSettlementStatus(id: string, status: string): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardCompanyRow(db, "settlements", id);
+  if (gErr) return { ok: false, error: gErr };
   const patch: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
   if (status === "ISSUED") patch.issued_at = new Date().toISOString();
   if (status === "PAID") patch.paid_at = new Date().toISOString();
@@ -315,9 +321,9 @@ export async function updateSettlementStatus(id: string, status: string): Promis
 
 /** 정산 삭제(해제) — FK on delete set null 로 포함 거래는 미정산으로 복귀. */
 export async function deleteSettlement(id: string): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardCompanyRow(db, "settlements", id);
+  if (gErr) return { ok: false, error: gErr };
   const { error } = await db.from("settlements").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
@@ -422,6 +428,8 @@ export async function createTaxInvoiceFromSettlement(settlementId: string): Prom
   if (!st) return { ok: false, error: "정산을 찾을 수 없습니다" };
   if (st.tax_invoice_id) return { ok: false, error: "이미 세금계산서가 연결되어 있습니다." };
   if (!st.company_id) return { ok: false, error: "사업자가 지정되지 않은 거래처는 세금계산서를 만들 수 없습니다(거래처에 사업자 지정 후 재시도)." };
+  const acc = await ensureCompanyAccess(st.company_id);
+  if (acc.error) return { ok: false, error: acc.error };
 
   const { data: inv, error: iErr } = await db.from("tax_invoices").insert({
     company_id: st.company_id, type: "SALES", status: "DONE", partner_id: st.partner_id,
