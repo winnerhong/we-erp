@@ -12,7 +12,7 @@ export default async function ErpLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ activeId, companies }, profile] = await Promise.all([
+  const [{ activeId, companies, restricted }, profile] = await Promise.all([
     getCompanyContext(),
     getCurrentProfile(),
   ]);
@@ -29,7 +29,7 @@ export default async function ErpLayout({
           <div className="flex items-center gap-3 text-xs text-neutral-500">
             <div className="flex items-center gap-2 text-sm text-neutral-500">
               <span className="hidden font-medium text-neutral-700 sm:inline">사업자</span>
-              <CompanySelector activeId={activeId} companies={companies} />
+              <CompanySelector activeId={activeId} companies={companies} restricted={restricted} />
             </div>
             <ProfileMenu profile={profile} />
             <form action={logout}>

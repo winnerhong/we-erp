@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCompanyContext } from "@/lib/active-company";
 import { FinanceClient, type DueItem, type OverdueRow } from "./finance-client";
 import { summarizeAging, overdueDays, type AgingItem } from "@/lib/aging";
 
@@ -24,16 +25,22 @@ export default async function FinancePage({
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const { first, next } = monthRange(month);
 
-  // 전 사업자 한눈에 (활성 사업자 필터 무시)
+  // 전 사업자 한눈에 (활성 사업자 필터 무시). 단, 회사 멤버십 제한 사용자는 담당 회사만.
   const supabase = await createClient();
+  const ctx = await getCompanyContext();
+  const restrictIds = ctx.restricted ? ctx.companies.map((c) => c.id) : null;
+
+  let invQ = supabase
+    .from("tax_invoices")
+    .select("id, company_id, type, total_amount, partner_id, doc_date, due_date, settled_at")
+    .gte("doc_date", first)
+    .lt("doc_date", next);
+  if (restrictIds) invQ = invQ.in("company_id", restrictIds.length ? restrictIds : ["-"]);
+
   const [{ data: companies }, { data: partners }, { data: inv }] = await Promise.all([
     supabase.from("companies").select("id, name"),
     supabase.from("partners").select("id, name"),
-    supabase
-      .from("tax_invoices")
-      .select("id, company_id, type, total_amount, partner_id, doc_date, due_date, settled_at")
-      .gte("doc_date", first)
-      .lt("doc_date", next),
+    invQ,
   ]);
 
   const cName = new Map(((companies ?? []) as { id: string; name: string }[]).map((c) => [c.id, c.name]));
@@ -42,7 +49,9 @@ export default async function FinancePage({
   // 통장 연결된 계산서 id(정산 판정) — 페이지네이션(1000행 캡 회피)
   const bankLinked = new Set<string>();
   for (let from = 0; from < 500000; from += 1000) {
-    const { data } = await supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null).range(from, from + 999);
+    let lq = supabase.from("bank_transactions").select("tax_invoice_id").not("tax_invoice_id", "is", null);
+    if (restrictIds) lq = lq.in("company_id", restrictIds.length ? restrictIds : ["-"]);
+    const { data } = await lq.range(from, from + 999);
     const batch = (data ?? []) as { tax_invoice_id: string }[];
     for (const b of batch) bankLinked.add(b.tax_invoice_id);
     if (batch.length < 1000) break;
@@ -87,11 +96,12 @@ export default async function FinancePage({
   const allUnsettled: Inv[] = [];
   const PAGE = 1000;
   for (let from = 0; from < 100000; from += PAGE) {
-    const { data } = await supabase
+    let uq = supabase
       .from("tax_invoices")
       .select("id, company_id, type, total_amount, partner_id, doc_date, due_date, settled_at")
-      .is("settled_at", null)
-      .range(from, from + PAGE - 1);
+      .is("settled_at", null);
+    if (restrictIds) uq = uq.in("company_id", restrictIds.length ? restrictIds : ["-"]);
+    const { data } = await uq.range(from, from + PAGE - 1);
     const batch = (data ?? []) as Inv[];
     allUnsettled.push(...batch);
     if (batch.length < PAGE) break;

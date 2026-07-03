@@ -34,6 +34,25 @@ export async function ensureAdmin(): Promise<Guard> {
   return g;
 }
 
+/** 회사 접근 권한 보장(쓰기 심층방어).
+ *  ADMIN·공용(null)은 통과. 배정이 하나도 없는 사용자도 통과(하위호환). 배정이 있으면 해당 회사 멤버여야. */
+export async function ensureCompanyAccess(companyId: string | null | undefined): Promise<Guard> {
+  const g = await ensureUser();
+  if (g.error) return g;
+  if (g.profile!.role === "ADMIN" || !companyId) return g;
+  const db = createAdminClient();
+  const { count } = await db.from("user_companies").select("id", { count: "exact", head: true }).eq("user_id", g.profile!.id);
+  if ((count ?? 0) === 0) return g; // 미배정 → 하위호환(제한 없음)
+  const { data: member } = await db
+    .from("user_companies")
+    .select("id")
+    .eq("user_id", g.profile!.id)
+    .eq("company_id", companyId)
+    .maybeSingle();
+  if (!member) return { error: "이 사업자에 대한 접근 권한이 없습니다." };
+  return g;
+}
+
 export interface SelfGuard {
   profile?: ProfileRow;
   employee?: EmployeeRow;

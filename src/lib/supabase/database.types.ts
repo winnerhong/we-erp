@@ -500,6 +500,15 @@ export interface BankTransactionRow extends Timestamps {
   group_id: string | null; // 정기거래 그룹(bank_txn_groups.id)
 }
 
+// 회사-사용자-역할 N:M:N (20260733)
+export interface UserCompanyRow {
+  id: string;
+  user_id: string;
+  company_id: string;
+  role: string | null;
+  created_at: string;
+}
+
 // 결산·마감(20260731)
 export interface PeriodLockRow {
   id: string;
@@ -859,6 +868,7 @@ export interface Database {
       approvals: TableShape<ApprovalRow, "title" | "doc_type">;
       approval_steps: TableShape<ApprovalStepRow, "approval_id" | "step_order">;
       period_locks: TableShape<PeriodLockRow, "company_id" | "period">;
+      user_companies: TableShape<UserCompanyRow, "user_id" | "company_id">;
       cards: TableShape<CardRow, "company_id" | "alias">;
       card_transactions: TableShape<
         CardTransactionRow,

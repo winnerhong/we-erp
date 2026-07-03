@@ -10,6 +10,30 @@ export interface Result {
   error?: string;
 }
 
+/** 사용자의 담당 사업자(회사 멤버십) 설정. 기존 배정을 교체. 빈 배열=전체 접근(하위호환).
+ *  원자성 근사: 새 멤버십을 먼저 upsert 하고, 성공한 뒤에만 목록에 없는 기존 것을 삭제한다.
+ *  (insert 실패로 0건이 되어 '전체 접근'으로 오히려 권한이 넓어지는 것을 방지) */
+export async function setUserCompanies(userId: string, companyIds: string[]): Promise<Result> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  const db = createAdminClient();
+  const ids = [...new Set(companyIds.filter(Boolean))];
+  if (ids.length > 0) {
+    const rows = ids.map((cid) => ({ user_id: userId, company_id: cid }));
+    const { error } = await db.from("user_companies").upsert(rows as never[], { onConflict: "user_id,company_id" });
+    if (error) return { ok: false, error: error.message };
+    // 새 목록에 없는 기존 배정만 삭제
+    const { error: dErr } = await db.from("user_companies").delete().eq("user_id", userId).not("company_id", "in", `(${ids.join(",")})`);
+    if (dErr) return { ok: false, error: dErr.message };
+  } else {
+    // 전체 접근으로 되돌림(명시적 초기화)
+    const { error } = await db.from("user_companies").delete().eq("user_id", userId);
+    if (error) return { ok: false, error: error.message };
+  }
+  revalidatePath("/admin/users");
+  return { ok: true };
+}
+
 /** 직원 계정 발급(관리자). */
 export async function createUser(
   email: string,
