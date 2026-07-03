@@ -11,7 +11,7 @@ import {
 } from "@/lib/ocr";
 import { defaultVatDeductible } from "@/lib/labels";
 import { normalizeBizNo } from "@/lib/validation";
-import { ensureCompanyAccess, guardCompanyRow } from "@/lib/auth-guard";
+import { ensureCompanyAccess, guardCompanyRow, guardCompanyRows } from "@/lib/auth-guard";
 import type { ReceiptRow } from "@/lib/supabase/database.types";
 
 const BUCKET = "receipts";
@@ -163,6 +163,38 @@ export async function confirmReceipt(id: string) {
     revalidatePath("/tax-invoices");
   }
   return res;
+}
+
+// ---------- 일괄 ----------
+/** 여러 영수증 일괄 확정(증빙=세금계산서면 매입 자동연결). */
+export async function bulkConfirmReceipts(ids: string[]): Promise<{ ok: boolean; error?: string; count?: number }> {
+  const g = await guardCompanyRows("receipts", ids);
+  if (g.error) return { ok: false, error: g.error };
+  let count = 0;
+  let firstErr: string | null = null;
+  for (const id of ids) {
+    const r = await confirmReceipt(id);
+    if (!r.ok) { if (!firstErr) firstErr = r.error ?? null; continue; }
+    count++;
+  }
+  if (count === 0 && firstErr) return { ok: false, error: firstErr };
+  return { ok: true, count };
+}
+
+/** 여러 영수증 일괄삭제(Storage 이미지도 함께 제거). */
+export async function bulkDeleteReceipts(ids: string[]): Promise<{ ok: boolean; error?: string; count?: number }> {
+  const g = await guardCompanyRows("receipts", ids);
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { data } = await db.from("receipts").select("image_path").in("id", ids);
+  const paths = ((data ?? []) as { image_path: string | null }[]).map((r) => r.image_path).filter((p): p is string => !!p);
+  if (paths.length > 0) await db.storage.from(BUCKET).remove(paths);
+  const { error } = await db.from("receipts").delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/receipts");
+  revalidatePath("/");
+  return { ok: true, count: ids.length };
 }
 
 /** 삭제 (Storage 객체도 함께 제거). */

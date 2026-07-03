@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui";
-import { createNotice, updateNotice, deleteNotice, togglePin, publishNotice } from "./actions";
+import { createNotice, updateNotice, deleteNotice, togglePin, publishNotice, bulkDeleteNotices, bulkSetNoticesPin, bulkPublishNotices } from "./actions";
+import { useTableSelection, BulkBar, BulkButton } from "@/components/bulk-select";
 
 export interface NoticeItem {
   id: string; title: string; body: string | null; audience: string;
@@ -27,19 +28,54 @@ export function NoticesClient({
   const run = (fn: () => Promise<{ ok: boolean; error?: string; info?: string }>) =>
     startTransition(async () => { const r = await fn(); if (!r.ok) alert(r.error); else { if (r.info) alert(r.info); router.refresh(); } });
 
+  const sel = useTableSelection(items);
+  const runBulk = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
+    startTransition(async () => { const r = await fn(); if (!r.ok) { alert(r.error); return; } sel.clear(); router.refresh(); });
+
   return (
     <div>
       <PageHeader title="📢 공지" description="기관 대상 공지·안내문 발행 (게시판 + 알림톡 연동 준비)"
         actions={<button onClick={() => setEditing("new")} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400">+ 공지 작성</button>} />
 
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <BulkButton onClick={() => runBulk(() => bulkPublishNotices(sel.selected))} disabled={pending}>발행</BulkButton>
+        <BulkButton onClick={() => runBulk(() => bulkSetNoticesPin(sel.selected, true))} disabled={pending}>📌 고정</BulkButton>
+        <BulkButton onClick={() => runBulk(() => bulkSetNoticesPin(sel.selected, false))} disabled={pending}>고정해제</BulkButton>
+        <BulkButton
+          tone="danger"
+          disabled={pending}
+          onClick={() => { if (confirm(`선택한 ${sel.count}건을 삭제할까요?`)) runBulk(() => bulkDeleteNotices(sel.selected)); }}
+        >
+          🗑 삭제
+        </BulkButton>
+      </BulkBar>
+
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-16 text-center text-sm text-neutral-400">작성된 공지가 없습니다.</p>
       ) : (
         <div className="space-y-2">
+          <label className="flex cursor-pointer items-center gap-2 px-1 text-xs text-neutral-500">
+            <input
+              type="checkbox"
+              checked={sel.allChecked}
+              ref={(el) => { if (el) el.indeterminate = sel.someChecked; }}
+              onChange={sel.toggleAll}
+              className="h-4 w-4 cursor-pointer rounded border-neutral-300 accent-indigo-500"
+            />
+            전체 선택 {sel.count > 0 && <span className="text-indigo-600">({sel.count})</span>}
+          </label>
           {items.map((n) => (
-            <div key={n.id} className={`rounded-2xl border bg-white p-4 ${n.pinned ? "border-amber-300" : "border-neutral-200"}`}>
+            <div key={n.id} className={`rounded-2xl border bg-white p-4 ${sel.isSelected(n.id) ? "border-indigo-300 ring-1 ring-indigo-200" : n.pinned ? "border-amber-300" : "border-neutral-200"}`}>
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0">
+                <div className="flex min-w-0 gap-3">
+                  <input
+                    type="checkbox"
+                    checked={sel.isSelected(n.id)}
+                    onChange={() => sel.toggle(n.id)}
+                    aria-label="선택"
+                    className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-neutral-300 accent-indigo-500"
+                  />
+                  <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
                     {n.pinned && <span title="상단고정">📌</span>}
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${n.status === "PUBLISHED" ? "bg-emerald-100 text-emerald-700" : "bg-neutral-100 text-neutral-500"}`}>{n.status === "PUBLISHED" ? "발행됨" : "작성중"}</span>
@@ -52,6 +88,7 @@ export function NoticesClient({
                     <span>{n.createdAt.slice(0, 10)}</span>
                     {(n.startDate || n.endDate) && <span>게시 {n.startDate ?? ""}~{n.endDate ?? ""}</span>}
                     {n.status === "PUBLISHED" && n.sentCount > 0 && <span className="text-emerald-500">알림톡 {n.sentCount}건</span>}
+                  </div>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">

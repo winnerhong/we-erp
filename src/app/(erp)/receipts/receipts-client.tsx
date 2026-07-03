@@ -16,7 +16,8 @@ import type {
   EvidenceType,
 } from "@/lib/supabase/database.types";
 import type { ImportCtx } from "@/lib/import-specs";
-import { uploadReceipt, updateReceipt, confirmReceipt, deleteReceipt } from "./actions";
+import { uploadReceipt, updateReceipt, confirmReceipt, deleteReceipt, bulkConfirmReceipts, bulkDeleteReceipts } from "./actions";
+import { useTableSelection, BulkBar, BulkButton } from "@/components/bulk-select";
 
 interface Props {
   receipts: ReceiptRow[];
@@ -55,6 +56,16 @@ export function ReceiptsClient({
   const [busy, setBusy] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [selected, setSelected] = useState<ReceiptRow | null>(null);
+  const [bulkPending, startBulk] = useTransition();
+  const bulk = useTableSelection(receipts);
+  function runBulk(fn: () => Promise<{ ok: boolean; error?: string }>) {
+    startBulk(async () => {
+      const r = await fn();
+      if (!r.ok) { alert(r.error); return; }
+      bulk.clear();
+      router.refresh();
+    });
+  }
 
   async function onFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -124,16 +135,46 @@ export function ReceiptsClient({
         </Card>
       )}
 
+      <BulkBar count={bulk.count} onClear={bulk.clear}>
+        <BulkButton onClick={() => runBulk(() => bulkConfirmReceipts(bulk.selected))} disabled={bulkPending}>검수완료(확정)</BulkButton>
+        <BulkButton
+          tone="danger"
+          disabled={bulkPending}
+          onClick={() => { if (confirm(`선택한 ${bulk.count}건을 삭제할까요? (이미지도 함께 삭제)`)) runBulk(() => bulkDeleteReceipts(bulk.selected)); }}
+        >
+          🗑 삭제
+        </BulkButton>
+      </BulkBar>
+
       <Card>
         {receipts.length === 0 ? (
           <EmptyState message="등록된 영수증이 없습니다. ‘영수증 업로드’로 시작하세요." />
         ) : (
+          <>
+          <label className="flex cursor-pointer items-center gap-2 border-b border-neutral-100 px-3 py-2 text-xs text-neutral-500 hover:bg-neutral-50">
+            <input
+              type="checkbox"
+              checked={bulk.allChecked}
+              ref={(el) => { if (el) el.indeterminate = bulk.someChecked; }}
+              onChange={bulk.toggleAll}
+              className="h-4 w-4 cursor-pointer rounded border-neutral-300 accent-indigo-500"
+            />
+            전체 선택 {bulk.count > 0 && <span className="text-indigo-600">({bulk.count})</span>}
+          </label>
           <div className="grid grid-cols-1 gap-px bg-neutral-100 sm:grid-cols-2 lg:grid-cols-3">
             {receipts.map((r) => (
+              <div key={r.id} className="relative bg-white">
+              <input
+                type="checkbox"
+                checked={bulk.isSelected(r.id)}
+                onChange={() => bulk.toggle(r.id)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="선택"
+                className="absolute left-2 top-2 z-10 h-4 w-4 cursor-pointer rounded border-neutral-300 bg-white/90 accent-indigo-500 shadow"
+              />
               <button
-                key={r.id}
                 onClick={() => setSelected(r)}
-                className="flex gap-3 bg-white p-3 text-left hover:bg-neutral-50"
+                className={`flex w-full gap-3 p-3 pl-8 text-left hover:bg-neutral-50 ${bulk.isSelected(r.id) ? "bg-indigo-50/50" : "bg-white"}`}
               >
                 {signedUrls[r.id] ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -171,8 +212,10 @@ export function ReceiptsClient({
                   )}
                 </div>
               </button>
+              </div>
             ))}
           </div>
+          </>
         )}
       </Card>
 

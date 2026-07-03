@@ -85,6 +85,44 @@ export async function togglePin(id: string, pinned: boolean): Promise<Result> {
   return { ok: true };
 }
 
+// ---------- 일괄 ----------
+export async function bulkDeleteNotices(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("notices").delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/notices");
+  return { ok: true, count: ids.length };
+}
+
+export async function bulkSetNoticesPin(ids: string[], pinned: boolean): Promise<Result & { count?: number }> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("notices").update({ pinned } as never).in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/notices");
+  return { ok: true, count: ids.length };
+}
+
+/** 여러 공지 일괄발행(각 건 알림톡 발송 로직 재사용). 이미 발행된 건 건너뜀. */
+export async function bulkPublishNotices(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  let count = 0;
+  let firstErr: string | null = null;
+  for (const id of ids) {
+    const r = await publishNotice(id);
+    if (!r.ok) { if (!firstErr) firstErr = r.error ?? null; continue; }
+    count++;
+  }
+  if (count === 0 && firstErr) return { ok: false, error: firstErr };
+  return { ok: true, count };
+}
+
 /** 공지 발행 — 게시판 노출 + (솔라피 키 있으면)알림톡 발송. */
 export async function publishNotice(id: string): Promise<Result> {
   const g = await ensureUser();
