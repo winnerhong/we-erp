@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getCompanyContext } from "@/lib/active-company";
+import { getCompanyContext, ALL_COMPANIES } from "@/lib/active-company";
 import { getCurrentProfile } from "@/lib/auth-guard";
 import { getAllowedMenuHrefs } from "@/lib/permissions";
 import { logout } from "@/app/actions/auth";
@@ -16,7 +16,10 @@ export default async function ErpLayout({
     getCompanyContext(),
     getCurrentProfile(),
   ]);
-  const allowedHrefs = await getAllowedMenuHrefs(profile?.role ?? null);
+  const allowedHrefs = await getAllowedMenuHrefs(
+    profile?.role ?? null,
+    activeId === ALL_COMPANIES ? null : activeId
+  );
   const activeCompany = companies.find((c) => c.id === activeId);
   const isManaged = activeCompany?.relation_type === "MANAGED";
 

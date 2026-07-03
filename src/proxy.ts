@@ -54,18 +54,28 @@ export async function proxy(request: NextRequest) {
     const role = (profile as { role: string } | null)?.role;
     const menu = MENUS.find((m) => m.href !== "/" && (path === m.href || path.startsWith(m.href + "/")));
 
-    // 직원(EMPLOYEE): 기본 전부 차단 → /me 로. 관리자가 권한관리에서 allowed=true 로 연 메뉴만 통과.
+    // 활성 사업자(쿠키) — 전체보기("ALL")·미설정이면 기본 규칙만 적용
+    const cookieCompany = request.cookies.get("erp_company")?.value;
+    const activeCompany = cookieCompany && cookieCompany !== "ALL" ? cookieCompany : null;
+
+    // 해당 메뉴의 유효 allowed 해석(활성 사업자 오버라이드 → 기본(null) → defaultAllow)
+    const menuAllowed = async (menuHref: string, defaultAllow: boolean): Promise<boolean> => {
+      let q = supabase
+        .from("role_menu_permissions")
+        .select("allowed, company_id")
+        .eq("role", role!)
+        .eq("menu_key", menuHref);
+      q = q.or(activeCompany ? `company_id.eq.${activeCompany},company_id.is.null` : "company_id.is.null");
+      const { data } = await q;
+      const rows = (data ?? []) as { allowed: boolean; company_id: string | null }[];
+      const override = activeCompany ? rows.find((r) => r.company_id === activeCompany) : undefined;
+      const base = rows.find((r) => r.company_id == null);
+      return override ? override.allowed : base ? base.allowed : defaultAllow;
+    };
+
+    // 직원(EMPLOYEE): 기본 전부 차단 → /me 로. 권한관리에서 열어준 메뉴만 통과.
     if (role === "EMPLOYEE") {
-      let allowed = false;
-      if (menu) {
-        const { data: perm } = await supabase
-          .from("role_menu_permissions")
-          .select("allowed")
-          .eq("role", role)
-          .eq("menu_key", menu.href)
-          .maybeSingle();
-        allowed = (perm as { allowed: boolean } | null)?.allowed === true;
-      }
+      const allowed = menu ? await menuAllowed(menu.href, false) : false;
       if (!allowed) {
         const url = request.nextUrl.clone();
         url.pathname = "/me";
@@ -73,15 +83,10 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(url);
       }
     }
-    // 그 외 비-ADMIN 등급: 메뉴별 allowed=false 만 차단 (대시보드'/'·/admin 은 통과)
+    // 그 외 비-ADMIN 등급: 유효 allowed=false 만 차단 (대시보드'/'·/admin 은 통과)
     else if (path !== "/" && !path.startsWith("/admin") && menu && role && role !== "ADMIN") {
-      const { data: perm } = await supabase
-        .from("role_menu_permissions")
-        .select("allowed")
-        .eq("role", role)
-        .eq("menu_key", menu.href)
-        .maybeSingle();
-      if (perm && (perm as { allowed: boolean }).allowed === false) {
+      const allowed = await menuAllowed(menu.href, true);
+      if (!allowed) {
         const url = request.nextUrl.clone();
         url.pathname = "/";
         url.search = "";

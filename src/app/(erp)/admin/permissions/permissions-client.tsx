@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, TextInput } from "@/components/ui";
 import type { MenuItem } from "@/lib/menus";
-import { setMenuPermission, createRole, renameRole, deleteRole, reorderRoles } from "./actions";
+import { setMenuPermission, clearMenuPermission, createRole, renameRole, deleteRole, reorderRoles } from "./actions";
 
 export interface RoleInfo {
   key: string;
@@ -13,25 +13,40 @@ export interface RoleInfo {
   builtin: boolean;
 }
 
+export interface CompanyOpt {
+  id: string;
+  name: string;
+  relation_type: string;
+}
+
+type Overrides = Record<string, Record<string, Record<string, boolean>>>;
+
 export function PermissionsClient({
   roles,
   menus,
   matrix,
+  companies,
+  overrides,
 }: {
   roles: RoleInfo[];
   menus: MenuItem[];
   matrix: Record<string, Record<string, boolean>>;
+  companies: CompanyOpt[];
+  overrides: Overrides;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [grid, setGrid] = useState(matrix);
+  const [grid, setGrid] = useState(matrix); // 기본(전역) 매트릭스
+  const [ov, setOv] = useState<Overrides>(overrides); // 사업자 오버라이드
+  const [selCompany, setSelCompany] = useState<string | null>(null); // null = 기본(전체)
   const [newRole, setNewRole] = useState("");
   const [order, setOrder] = useState<string[]>(roles.map((r) => r.key));
   const [dragKey, setDragKey] = useState<string | null>(null);
 
   const nonAdmin = roles.filter((r) => !r.isAdmin);
+  const owned = companies.filter((c) => c.relation_type !== "MANAGED");
+  const managed = companies.filter((c) => c.relation_type === "MANAGED");
 
-  // order 상태 기준으로 정렬 + 신규/삭제 등급 반영
   const roleByKey = new Map(roles.map((r) => [r.key, r]));
   const orderedRoles: RoleInfo[] = [
     ...order.filter((k) => roleByKey.has(k)).map((k) => roleByKey.get(k)!),
@@ -41,6 +56,22 @@ export function PermissionsClient({
   function refresh() {
     router.refresh();
   }
+
+  // 활성 대상(기본/회사) 기준 유효값·오버라이드 여부
+  const baseVal = (role: string, href: string) => grid[role]?.[href] ?? true;
+  const effective = (role: string, href: string): boolean => {
+    if (selCompany) {
+      const o = ov[selCompany]?.[role]?.[href];
+      if (o !== undefined) return o;
+    }
+    return baseVal(role, href);
+  };
+  const isOverride = (role: string, href: string): boolean =>
+    !!selCompany && ov[selCompany]?.[role]?.[href] !== undefined;
+
+  const overrideCount = selCompany
+    ? Object.values(ov[selCompany] ?? {}).reduce((s, m) => s + Object.keys(m).length, 0)
+    : 0;
 
   function onDropRole(targetKey: string) {
     if (!dragKey || dragKey === targetKey) {
@@ -62,14 +93,46 @@ export function PermissionsClient({
   }
 
   function toggle(roleKey: string, href: string) {
-    const next = !grid[roleKey]?.[href];
-    setGrid((g) => ({ ...g, [roleKey]: { ...g[roleKey], [href]: next } }));
+    const cur = effective(roleKey, href);
+    const next = !cur;
+    if (!selCompany) {
+      // 기본(전역) 규칙
+      setGrid((g) => ({ ...g, [roleKey]: { ...g[roleKey], [href]: next } }));
+      startTransition(async () => {
+        const res = await setMenuPermission(roleKey, href, next, null);
+        if (!res.ok) {
+          setGrid((g) => ({ ...g, [roleKey]: { ...g[roleKey], [href]: cur } }));
+          alert(res.error);
+        }
+        refresh();
+      });
+    } else {
+      const c = selCompany;
+      setOv((prev) => ({
+        ...prev,
+        [c]: { ...prev[c], [roleKey]: { ...prev[c]?.[roleKey], [href]: next } },
+      }));
+      startTransition(async () => {
+        const res = await setMenuPermission(roleKey, href, next, c);
+        if (!res.ok) alert(res.error);
+        refresh();
+      });
+    }
+  }
+
+  function resetOverride(roleKey: string, href: string) {
+    const c = selCompany;
+    if (!c) return;
+    setOv((prev) => {
+      const compRoles = { ...(prev[c] ?? {}) };
+      const roleMenus = { ...(compRoles[roleKey] ?? {}) };
+      delete roleMenus[href];
+      compRoles[roleKey] = roleMenus;
+      return { ...prev, [c]: compRoles };
+    });
     startTransition(async () => {
-      const res = await setMenuPermission(roleKey, href, next);
-      if (!res.ok) {
-        setGrid((g) => ({ ...g, [roleKey]: { ...g[roleKey], [href]: !next } }));
-        alert(res.error);
-      }
+      const res = await clearMenuPermission(roleKey, href, c);
+      if (!res.ok) alert(res.error);
       refresh();
     });
   }
@@ -138,7 +201,35 @@ export function PermissionsClient({
       </Card>
 
       {/* 메뉴 접근 매트릭스 */}
-      <h2 className="mb-2 text-sm font-semibold text-neutral-700">메뉴 접근</h2>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-neutral-700">메뉴 접근</h2>
+        {selCompany && (
+          <span className="text-xs text-neutral-500">
+            이 사업자 오버라이드 <b className="text-indigo-600">{overrideCount}</b>개 · 나머지는 기본값 상속
+          </span>
+        )}
+      </div>
+
+      {/* 적용 대상(기본/사업자) 선택 */}
+      {companies.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 rounded-lg bg-neutral-100 p-1.5">
+          <span className="px-1.5 text-xs font-medium text-neutral-500">적용 대상</span>
+          <TargetBtn active={selCompany === null} onClick={() => setSelCompany(null)}>
+            기본(전체)
+          </TargetBtn>
+          {owned.map((c) => (
+            <TargetBtn key={c.id} active={selCompany === c.id} onClick={() => setSelCompany(c.id)}>
+              {c.name}
+            </TargetBtn>
+          ))}
+          {managed.map((c) => (
+            <TargetBtn key={c.id} active={selCompany === c.id} onClick={() => setSelCompany(c.id)}>
+              {c.name} <span className="text-[10px] opacity-70">수임</span>
+            </TargetBtn>
+          ))}
+        </div>
+      )}
+
       <Card className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-neutral-200 text-xs text-neutral-500">
@@ -158,11 +249,35 @@ export function PermissionsClient({
                   <span className="font-medium text-neutral-800">{m.label}</span>
                 </td>
                 <td className="px-4 py-3 text-center text-xs text-neutral-400">✓ 항상</td>
-                {nonAdmin.map((r) => (
-                  <td key={r.key} className="px-4 py-3 text-center">
-                    <Switch on={!!grid[r.key]?.[m.href]} disabled={pending} onClick={() => toggle(r.key, m.href)} />
-                  </td>
-                ))}
+                {nonAdmin.map((r) => {
+                  const override = isOverride(r.key, m.href);
+                  return (
+                    <td key={r.key} className="px-4 py-3 text-center">
+                      <div className="inline-flex items-center gap-1.5">
+                        <Switch
+                          on={effective(r.key, m.href)}
+                          override={override}
+                          disabled={pending}
+                          onClick={() => toggle(r.key, m.href)}
+                        />
+                        {selCompany && (
+                          override ? (
+                            <button
+                              onClick={() => resetOverride(r.key, m.href)}
+                              disabled={pending}
+                              title="기본값으로 되돌리기"
+                              className="text-xs text-neutral-400 hover:text-indigo-600"
+                            >
+                              ↺
+                            </button>
+                          ) : (
+                            <span title="기본값 상속" className="text-[10px] text-neutral-300">상속</span>
+                          )
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -170,9 +285,23 @@ export function PermissionsClient({
       </Card>
 
       <p className="mt-3 text-xs text-neutral-400">
-        ※ 메뉴 숨김은 화면 표시 기준입니다. 데이터 쓰기 보안(관리자 전용 기능 등)은 서버 액션 가드로 별도 보호됩니다.
+        ※ ‘기본(전체)’은 모든 사업자에 공통 적용됩니다. 특정 사업자를 고르면 그 회사만 다르게 설정할 수 있고(오버라이드),
+        설정하지 않은 항목은 기본값을 따릅니다. 메뉴 숨김은 화면 표시 기준이며, 데이터 쓰기 보안은 서버 액션 가드로 별도 보호됩니다.
       </p>
     </div>
+  );
+}
+
+function TargetBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+        active ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -232,14 +361,15 @@ function RoleChip({ role, onChanged, disabled }: { role: RoleInfo; onChanged: ()
   );
 }
 
-function Switch({ on, disabled, onClick }: { on: boolean; disabled: boolean; onClick: () => void }) {
+function Switch({ on, override, disabled, onClick }: { on: boolean; override?: boolean; disabled: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
+      title={override ? "이 사업자 전용 설정" : undefined}
       className={`inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
         on ? "bg-emerald-500" : "bg-neutral-300"
-      }`}
+      } ${override ? "ring-2 ring-indigo-400 ring-offset-1" : ""}`}
     >
       <span
         className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${

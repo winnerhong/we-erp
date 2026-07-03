@@ -630,9 +630,12 @@ export interface CardTransactionRow extends Timestamps {
 }
 
 export interface RoleMenuPermissionRow {
+  id: string;
   role: AppRole;
   menu_key: string;
   allowed: boolean;
+  /** null=기본(전체 회사 공통), 값=그 사업자 전용 오버라이드. */
+  company_id: string | null;
 }
 
 export interface RoleRow {

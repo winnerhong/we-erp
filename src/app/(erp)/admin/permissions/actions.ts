@@ -11,11 +11,12 @@ export interface Result {
 
 const BUILTIN = ["ADMIN", "MEMBER"];
 
-/** 역할별 메뉴 접근 허용/차단 설정. */
+/** 역할별 메뉴 접근 허용/차단 설정. companyId=null 이면 기본(전체 회사), 값이면 그 사업자 오버라이드. */
 export async function setMenuPermission(
   role: string,
   menuKey: string,
-  allowed: boolean
+  allowed: boolean,
+  companyId: string | null = null
 ): Promise<Result> {
   const g = await ensureAdmin();
   if (g.error) return { ok: false, error: g.error };
@@ -23,9 +24,30 @@ export async function setMenuPermission(
   const db = createAdminClient();
   const { error } = await db
     .from("role_menu_permissions")
-    .upsert({ role, menu_key: menuKey, allowed } as never, { onConflict: "role,menu_key" });
+    .upsert({ role, menu_key: menuKey, allowed, company_id: companyId } as never, { onConflict: "company_id,role,menu_key" });
   if (error) return { ok: false, error: error.message };
   revalidatePath("/", "layout"); // 사이드바(전 페이지) 갱신
+  return { ok: true };
+}
+
+/** 사업자 오버라이드 제거 → 기본값 상속으로 되돌림. */
+export async function clearMenuPermission(
+  role: string,
+  menuKey: string,
+  companyId: string
+): Promise<Result> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  if (!companyId) return { ok: false, error: "사업자가 지정되지 않았습니다" };
+  const db = createAdminClient();
+  const { error } = await db
+    .from("role_menu_permissions")
+    .delete()
+    .eq("role", role)
+    .eq("menu_key", menuKey)
+    .eq("company_id", companyId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
