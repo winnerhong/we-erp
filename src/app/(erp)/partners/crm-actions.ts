@@ -62,6 +62,13 @@ function contractPayload(input: ContractInput) {
   };
 }
 
+/** 대상 레코드(id)의 소속 회사 접근 권한 확인 → 오류메시지 또는 null. */
+async function guardCompanyRow(db: ReturnType<typeof createAdminClient>, table: string, id: string): Promise<string | null> {
+  const { data } = await db.from(table).select("company_id").eq("id", id).maybeSingle();
+  const acc = await ensureCompanyAccess((data as { company_id: string | null } | null)?.company_id ?? null);
+  return acc.error ?? null;
+}
+
 export async function createContract(input: ContractInput): Promise<Result> {
   const g = await ensureCompanyAccess(input.company_id ?? null);
   if (g.error) return { ok: false, error: g.error };
@@ -75,9 +82,9 @@ export async function createContract(input: ContractInput): Promise<Result> {
 }
 
 export async function updateContract(id: string, input: ContractInput): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardCompanyRow(db, "contracts", id);
+  if (gErr) return { ok: false, error: gErr };
   const { error } = await db.from("contracts").update({ ...contractPayload(input), updated_at: new Date().toISOString() } as never).eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
@@ -85,9 +92,9 @@ export async function updateContract(id: string, input: ContractInput): Promise<
 }
 
 export async function deleteContract(id: string): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardCompanyRow(db, "contracts", id);
+  if (gErr) return { ok: false, error: gErr };
   const { error } = await db.from("contracts").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
@@ -143,9 +150,9 @@ export async function createTransaction(input: TxnInput): Promise<Result> {
 }
 
 export async function updateTransaction(id: string, input: TxnInput): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardCompanyRow(db, "transactions", id);
+  if (gErr) return { ok: false, error: gErr };
   const { error } = await db.from("transactions").update({ ...txnPayload(input), updated_at: new Date().toISOString() } as never).eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
@@ -153,9 +160,9 @@ export async function updateTransaction(id: string, input: TxnInput): Promise<Re
 }
 
 export async function deleteTransaction(id: string): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const gErr = await guardCompanyRow(db, "transactions", id);
+  if (gErr) return { ok: false, error: gErr };
   const { error } = await db.from("transactions").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
