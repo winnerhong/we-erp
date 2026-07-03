@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 import { parseCardRow, cardSourceRef } from "@/lib/card-import";
 import type { CardRow, CardTransactionRow } from "@/lib/supabase/database.types";
 
@@ -15,7 +15,7 @@ export interface Result {
 export async function createCard(
   value: Partial<CardRow> & { company_id: string; alias: string }
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await ensureCompanyAccess(value.company_id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("cards").insert(value as never);
@@ -49,7 +49,7 @@ export async function deleteCard(id: string): Promise<Result> {
 export async function addCardTxn(
   value: Partial<CardTransactionRow> & { card_id: string; company_id: string; txn_date: string }
 ): Promise<Result> {
-  const g = await ensureUser();
+  const g = await ensureCompanyAccess(value.company_id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
   const { error } = await db.from("card_transactions").insert(value as never);

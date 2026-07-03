@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 import { availableDelta, totalDelta } from "@/lib/assets";
 import type { AssetRow } from "@/lib/supabase/database.types";
 
@@ -39,7 +39,7 @@ export interface AssetInput {
 }
 
 export async function createAsset(input: AssetInput): Promise<Result> {
-  const g = await ensureUser();
+  const g = await ensureCompanyAccess(input.company_id ?? null);
   if (g.error) return { ok: false, error: g.error };
   if (!input.name.trim()) return { ok: false, error: "교구명을 입력하세요" };
   const total = Math.max(0, int(input.total_qty, 1));

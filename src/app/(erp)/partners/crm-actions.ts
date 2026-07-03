@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 import { calcTax } from "@/lib/crm";
 import { kstToday } from "@/lib/attendance";
 import type { ContractRow, SettlementRow, PartnerAttachmentRow } from "@/lib/supabase/database.types";
@@ -63,7 +63,7 @@ function contractPayload(input: ContractInput) {
 }
 
 export async function createContract(input: ContractInput): Promise<Result> {
-  const g = await ensureUser();
+  const g = await ensureCompanyAccess(input.company_id ?? null);
   if (g.error) return { ok: false, error: g.error };
   if (!input.partner_id) return { ok: false, error: "거래처가 지정되지 않았습니다" };
   if (!input.name.trim()) return { ok: false, error: "계약명을 입력하세요" };
@@ -130,7 +130,7 @@ function txnPayload(input: TxnInput) {
 }
 
 export async function createTransaction(input: TxnInput): Promise<Result> {
-  const g = await ensureUser();
+  const g = await ensureCompanyAccess(input.company_id ?? null);
   if (g.error) return { ok: false, error: g.error };
   if (!input.partner_id) return { ok: false, error: "거래처가 지정되지 않았습니다" };
   if (!input.txn_date) return { ok: false, error: "거래일을 입력하세요" };

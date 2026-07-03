@@ -11,7 +11,7 @@ import {
 } from "@/lib/ocr";
 import { defaultVatDeductible } from "@/lib/labels";
 import { normalizeBizNo } from "@/lib/validation";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 import type { ReceiptRow } from "@/lib/supabase/database.types";
 
 const BUCKET = "receipts";
@@ -31,9 +31,9 @@ export async function uploadReceipt(
   fileName: string,
   base64: string
 ): Promise<UploadResult> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   if (!companyId) return { ok: false, error: "사업자를 먼저 선택하세요" };
+  const g = await ensureCompanyAccess(companyId);
+  if (g.error) return { ok: false, error: g.error };
   const mediaType = mediaTypeFromName(fileName);
   if (!mediaType)
     return { ok: false, error: `지원하지 않는 형식: ${fileName} (jpg/png/webp/gif)` };

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { fetchLinkPreview, type LinkPreview } from "@/lib/link-preview";
 import { AUTO_APPROVE_LIMIT } from "@/lib/labels";
-import { ensureUser } from "@/lib/auth-guard";
+import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
 import type {
   PurchaseRequestRow,
   PurchaseStatus,
@@ -39,9 +39,9 @@ export interface NewPurchase {
 
 /** 구매 요청 등록. 소액(AUTO_APPROVE_LIMIT 미만)은 자동 승인. */
 export async function createPurchaseRequest(v: NewPurchase): Promise<Result> {
-  const g = await ensureUser();
-  if (g.error) return { ok: false, error: g.error };
   if (!v.company_id) return { ok: false, error: "사업자를 먼저 선택하세요" };
+  const g = await ensureCompanyAccess(v.company_id);
+  if (g.error) return { ok: false, error: g.error };
   const autoApprove = v.amount > 0 && v.amount < AUTO_APPROVE_LIMIT;
   const db = createAdminClient();
   const { error } = await db.from("purchase_requests").insert({
