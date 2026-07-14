@@ -3,7 +3,8 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { EntityWorkspace, KpiCard, type EwItem, type EwTab } from "@/components/entity-workspace";
-import { importStudentsFromWks } from "./actions";
+import { importStudentsFromWks, bulkSetStudentStatus, bulkDeleteStudents } from "./actions";
+import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
 
 export interface StudentRow {
   id: string;
@@ -78,6 +79,16 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 export function StudentsClient({ rows, selectedId }: { rows: StudentRow[]; selectedId: string | null }) {
   const [view, setView] = useState<"card" | "grid">("card");
+  const gridRouter = useRouter();
+  const [bulkPending, startBulk] = useTransition();
+  const sel = useTableSelection(rows);
+  const runBulk = (fn: () => Promise<{ ok: boolean; error?: string }>) =>
+    startBulk(async () => {
+      const r = await fn();
+      if (!r.ok) { alert(r.error); return; }
+      sel.clear();
+      gridRouter.refresh();
+    });
 
   const items: EwItem[] = rows.map((r) => ({
     id: r.id,
@@ -133,10 +144,18 @@ export function StudentsClient({ rows, selectedId }: { rows: StudentRow[]; selec
           <h1 className="text-xl font-bold text-neutral-900">원생 관리</h1>
           <div className="flex items-center gap-1.5">{actions}</div>
         </div>
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          <span className="text-xs text-neutral-500">상태 일괄변경:</span>
+          <BulkButton onClick={() => runBulk(() => bulkSetStudentStatus(sel.selected, "재원"))} disabled={bulkPending}>재원</BulkButton>
+          <BulkButton onClick={() => runBulk(() => bulkSetStudentStatus(sel.selected, "휴원"))} disabled={bulkPending}>휴원</BulkButton>
+          <BulkButton onClick={() => runBulk(() => bulkSetStudentStatus(sel.selected, "퇴원"))} disabled={bulkPending}>퇴원</BulkButton>
+          <BulkButton tone="danger" disabled={bulkPending} onClick={() => { if (confirm(`선택한 ${sel.count}명을 삭제할까요? 되돌릴 수 없습니다.`)) runBulk(() => bulkDeleteStudents(sel.selected)); }}>🗑 삭제</BulkButton>
+        </BulkBar>
         <div className="overflow-auto rounded-2xl border border-neutral-200 bg-white">
           <table className="min-w-full text-sm">
             <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs text-neutral-500">
               <tr>
+                <SelectAllCell checked={sel.allChecked} someChecked={sel.someChecked} onToggle={sel.toggleAll} />
                 {["이름", "상태", "학교", "학년", "반", "보호자", "보호자연락처", "등록일"].map((h) => (
                   <th key={h} className="px-3 py-2 font-semibold">{h}</th>
                 ))}
@@ -144,7 +163,8 @@ export function StudentsClient({ rows, selectedId }: { rows: StudentRow[]; selec
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {rows.map((r) => (
-                <tr key={r.id} className="hover:bg-neutral-50">
+                <tr key={r.id} className={`hover:bg-neutral-50 ${sel.isSelected(r.id) ? "bg-indigo-50/50" : ""}`}>
+                  <SelectRowCell checked={sel.isSelected(r.id)} onToggle={() => sel.toggle(r.id)} />
                   <td className="px-3 py-2 font-medium text-neutral-800">{r.name}</td>
                   <td className="px-3 py-2">{r.status ?? "-"}</td>
                   <td className="px-3 py-2 text-neutral-600">{r.school ?? "-"}</td>
