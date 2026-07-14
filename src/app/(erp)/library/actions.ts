@@ -190,6 +190,22 @@ export async function deleteFile(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/** 여러 자료 일괄삭제(Storage 객체도 함께 제거). 관리자. */
+export async function bulkDeleteFiles(ids: string[]): Promise<Result> {
+  const g = await ensureAdmin();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true };
+  const db = createAdminClient();
+  const { data } = await db.from("library_files").select("storage_path").in("id", ids);
+  const paths = ((data ?? []) as { storage_path: string | null }[]).map((r) => r.storage_path).filter((p): p is string => !!p);
+  const { error } = await db.from("library_files").delete().in("id", ids);
+  if (error) return { ok: false, error: error.message };
+  if (paths.length > 0) await db.storage.from(BUCKET).remove(paths);
+  revalidatePath("/library");
+  revalidatePath("/me");
+  return { ok: true };
+}
+
 /** 다운로드용 서명 URL 발급(공개범위 확인 + 다운로드수 +1). */
 export async function getDownloadUrl(id: string): Promise<Result> {
   const g = await ensureUser();

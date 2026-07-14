@@ -3,7 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { fmtSize, fileIcon, VISIBILITY_LABEL } from "@/lib/library";
 import type { LibraryVisibility } from "@/lib/supabase/database.types";
-import { getDownloadUrl, toggleFavorite } from "@/app/(erp)/library/actions";
+import { getDownloadUrl, toggleFavorite, bulkDeleteFiles } from "@/app/(erp)/library/actions";
+import { useTableSelection, BulkBar, BulkButton } from "@/components/bulk-select";
 
 export interface LibFolder {
   id: string;
@@ -82,6 +83,18 @@ export function LibraryBrowser({
     return list;
   }, [files, sel, search, sort, favSet, recentCutoff]);
 
+  const bulk = useTableSelection(shown);
+  const [bulkPending, startBulk] = useTransition();
+  function runBulkDelete() {
+    if (!confirm(`선택한 ${bulk.count}개 자료를 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    startBulk(async () => {
+      const r = await bulkDeleteFiles(bulk.selected);
+      if (!r.ok) { alert(r.error); return; }
+      bulk.clear();
+      onRefresh();
+    });
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)]">
       {/* 사이드: 폴더 */}
@@ -112,12 +125,31 @@ export function LibraryBrowser({
           </select>
         </div>
 
+        {canManage && (
+          <BulkBar count={bulk.count} onClear={bulk.clear}>
+            <BulkButton tone="danger" disabled={bulkPending} onClick={runBulkDelete}>🗑 일괄 삭제</BulkButton>
+          </BulkBar>
+        )}
+
         {shown.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-16 text-center text-sm text-neutral-400">자료가 없습니다.</p>
         ) : (
           <div className="space-y-2">
+            {canManage && (
+              <label className="flex cursor-pointer items-center gap-2 px-1 text-xs text-neutral-500">
+                <input
+                  type="checkbox"
+                  checked={bulk.allChecked}
+                  ref={(el) => { if (el) el.indeterminate = bulk.someChecked; }}
+                  onChange={bulk.toggleAll}
+                  className="h-4 w-4 cursor-pointer rounded border-neutral-300 accent-indigo-500"
+                />
+                전체 선택 {bulk.count > 0 && <span className="text-indigo-600">({bulk.count})</span>}
+              </label>
+            )}
             {shown.map((f) => (
               <FileRow key={f.id} f={f} fav={favSet.has(f.id)} canManage={canManage}
+                selected={bulk.isSelected(f.id)} onToggle={() => bulk.toggle(f.id)}
                 onEdit={onEdit} onDelete={onDelete} onRefresh={onRefresh} />
             ))}
           </div>
@@ -141,9 +173,9 @@ function SideBtn({ active, icon, label, n, onClick }: { active: boolean; icon: s
 }
 
 function FileRow({
-  f, fav, canManage, onEdit, onDelete, onRefresh,
+  f, fav, canManage, selected, onToggle, onEdit, onDelete, onRefresh,
 }: {
-  f: LibFile; fav: boolean; canManage: boolean;
+  f: LibFile; fav: boolean; canManage: boolean; selected: boolean; onToggle: () => void;
   onEdit?: (file: LibFile) => void; onDelete?: (file: LibFile) => void; onRefresh: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -171,7 +203,16 @@ function FileRow({
 
   const vis = f.visibility as LibraryVisibility;
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3 hover:border-neutral-300">
+    <div className={`flex items-center gap-3 rounded-xl border bg-white p-3 hover:border-neutral-300 ${selected ? "border-indigo-300 ring-1 ring-indigo-200" : "border-neutral-200"}`}>
+      {canManage && (
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          aria-label="선택"
+          className="h-4 w-4 shrink-0 cursor-pointer rounded border-neutral-300 accent-indigo-500"
+        />
+      )}
       <div className="text-2xl">{fileIcon(f.fileName, f.mime)}</div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
