@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureUser, ensureCompanyAccess, guardCompanyRows } from "@/lib/auth-guard";
+import { periodLockError } from "@/lib/period-lock";
 import type { TaxInvoiceRow } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -30,6 +31,8 @@ export async function createTrade(v: NewTrade): Promise<Result> {
   const g = await ensureCompanyAccess(v.company_id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const lockErr = await periodLockError(db, v.company_id, v.doc_date);
+  if (lockErr) return { ok: false, error: lockErr };
   const { error } = await db.from("tax_invoices").insert({
     company_id: v.company_id,
     type: v.type,
@@ -52,9 +55,11 @@ export async function createTrade(v: NewTrade): Promise<Result> {
 }
 
 async function guardInvoice(db: ReturnType<typeof createAdminClient>, id: string): Promise<string | null> {
-  const { data } = await db.from("tax_invoices").select("company_id").eq("id", id).maybeSingle();
-  const acc = await ensureCompanyAccess((data as { company_id: string | null } | null)?.company_id ?? null);
-  return acc.error ?? null;
+  const { data } = await db.from("tax_invoices").select("company_id, doc_date").eq("id", id).maybeSingle();
+  const row = data as { company_id: string | null; doc_date: string | null } | null;
+  const acc = await ensureCompanyAccess(row?.company_id ?? null);
+  if (acc.error) return acc.error;
+  return await periodLockError(db, row?.company_id, row?.doc_date);
 }
 
 export async function updateTrade(id: string, patch: Partial<TaxInvoiceRow>): Promise<Result> {

@@ -12,6 +12,7 @@ import {
 import { defaultVatDeductible } from "@/lib/labels";
 import { normalizeBizNo } from "@/lib/validation";
 import { ensureCompanyAccess, guardCompanyRow, guardCompanyRows } from "@/lib/auth-guard";
+import { periodLockError } from "@/lib/period-lock";
 import type { ReceiptRow } from "@/lib/supabase/database.types";
 
 const BUCKET = "receipts";
@@ -124,6 +125,10 @@ export async function updateReceipt(
   const g = await guardCompanyRow("receipts", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const { data: cur } = await db.from("receipts").select("company_id, doc_date").eq("id", id).maybeSingle();
+  const c = cur as { company_id: string | null; doc_date: string | null } | null;
+  const lockErr = await periodLockError(db, c?.company_id, c?.doc_date);
+  if (lockErr) return { ok: false, error: lockErr };
   const { error } = await db.from("receipts").update(patch as never).eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/receipts");
@@ -202,6 +207,10 @@ export async function deleteReceipt(id: string, imagePath: string) {
   const g = await guardCompanyRow("receipts", id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const { data: cur } = await db.from("receipts").select("company_id, doc_date").eq("id", id).maybeSingle();
+  const c = cur as { company_id: string | null; doc_date: string | null } | null;
+  const lockErr = await periodLockError(db, c?.company_id, c?.doc_date);
+  if (lockErr) return { ok: false, error: lockErr };
   await db.storage.from(BUCKET).remove([imagePath]);
   const { error } = await db.from("receipts").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };

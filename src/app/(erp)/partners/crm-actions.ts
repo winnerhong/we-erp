@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureUser, ensureCompanyAccess } from "@/lib/auth-guard";
+import { periodLockError } from "@/lib/period-lock";
 import { calcTax } from "@/lib/crm";
 import { kstToday } from "@/lib/attendance";
 import type { ContractRow, SettlementRow, PartnerAttachmentRow } from "@/lib/supabase/database.types";
@@ -142,6 +143,8 @@ export async function createTransaction(input: TxnInput): Promise<Result> {
   if (!input.partner_id) return { ok: false, error: "거래처가 지정되지 않았습니다" };
   if (!input.txn_date) return { ok: false, error: "거래일을 입력하세요" };
   const db = createAdminClient();
+  const lockErr = await periodLockError(db, input.company_id ?? null, input.txn_date);
+  if (lockErr) return { ok: false, error: lockErr };
   const { data, error } = await db.from("transactions").insert(txnPayload(input) as never).select("id").single();
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
@@ -153,6 +156,10 @@ export async function updateTransaction(id: string, input: TxnInput): Promise<Re
   const db = createAdminClient();
   const gErr = await guardCompanyRow(db, "transactions", id);
   if (gErr) return { ok: false, error: gErr };
+  const { data: cur } = await db.from("transactions").select("company_id, txn_date").eq("id", id).maybeSingle();
+  const c = cur as { company_id: string | null; txn_date: string | null } | null;
+  const lockErr = (await periodLockError(db, c?.company_id, c?.txn_date)) ?? (await periodLockError(db, input.company_id ?? c?.company_id, input.txn_date));
+  if (lockErr) return { ok: false, error: lockErr };
   const { error } = await db.from("transactions").update({ ...txnPayload(input), updated_at: new Date().toISOString() } as never).eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");
@@ -163,6 +170,10 @@ export async function deleteTransaction(id: string): Promise<Result> {
   const db = createAdminClient();
   const gErr = await guardCompanyRow(db, "transactions", id);
   if (gErr) return { ok: false, error: gErr };
+  const { data: cur } = await db.from("transactions").select("company_id, txn_date").eq("id", id).maybeSingle();
+  const c = cur as { company_id: string | null; txn_date: string | null } | null;
+  const lockErr = await periodLockError(db, c?.company_id, c?.txn_date);
+  if (lockErr) return { ok: false, error: lockErr };
   const { error } = await db.from("transactions").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/partners");

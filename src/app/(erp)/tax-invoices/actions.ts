@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureCompanyAccess, guardCompanyRows } from "@/lib/auth-guard";
+import { periodLockError } from "@/lib/period-lock";
 import type { TaxInvoiceRow, TaxInvoiceStatus } from "@/lib/supabase/database.types";
 
 export interface Result {
@@ -10,11 +11,13 @@ export interface Result {
   error?: string;
 }
 
-/** 대상 계산서(id)의 소속 회사 접근 권한 확인 → 오류메시지 또는 null. */
+/** 대상 계산서(id)의 회사 접근 + 결산마감 확인 → 오류메시지 또는 null. */
 async function guardInvoice(db: ReturnType<typeof createAdminClient>, id: string): Promise<string | null> {
-  const { data } = await db.from("tax_invoices").select("company_id").eq("id", id).maybeSingle();
-  const acc = await ensureCompanyAccess((data as { company_id: string | null } | null)?.company_id ?? null);
-  return acc.error ?? null;
+  const { data } = await db.from("tax_invoices").select("company_id, doc_date").eq("id", id).maybeSingle();
+  const row = data as { company_id: string | null; doc_date: string | null } | null;
+  const acc = await ensureCompanyAccess(row?.company_id ?? null);
+  if (acc.error) return acc.error;
+  return await periodLockError(db, row?.company_id, row?.doc_date);
 }
 
 export async function createTaxInvoice(
@@ -23,6 +26,8 @@ export async function createTaxInvoice(
   const g = await ensureCompanyAccess(value.company_id);
   if (g.error) return { ok: false, error: g.error };
   const db = createAdminClient();
+  const lockErr = await periodLockError(db, value.company_id, value.doc_date ?? null);
+  if (lockErr) return { ok: false, error: lockErr };
   const { error } = await db.from("tax_invoices").insert(value as never);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/tax-invoices");
@@ -64,11 +69,24 @@ export async function setTaxInvoiceSettled(id: string, settledDate: string | nul
 }
 
 // ---------- 일괄 ----------
+/** 대상 계산서들 중 마감기간에 걸린 게 있으면 오류메시지. */
+async function bulkPeriodError(db: ReturnType<typeof createAdminClient>, ids: string[]): Promise<string | null> {
+  if (ids.length === 0) return null;
+  const { data } = await db.from("tax_invoices").select("company_id, doc_date").in("id", ids);
+  for (const r of (data ?? []) as { company_id: string | null; doc_date: string | null }[]) {
+    const e = await periodLockError(db, r.company_id, r.doc_date);
+    if (e) return e;
+  }
+  return null;
+}
+
 export async function bulkSetTaxStatus(ids: string[], status: TaxInvoiceStatus): Promise<Result & { count?: number }> {
   const g = await guardCompanyRows("tax_invoices", ids);
   if (g.error) return { ok: false, error: g.error };
   if (ids.length === 0) return { ok: true, count: 0 };
   const db = createAdminClient();
+  const lockErr = await bulkPeriodError(db, ids);
+  if (lockErr) return { ok: false, error: lockErr };
   const { error } = await db.from("tax_invoices").update({ status } as never).in("id", ids);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/tax-invoices");
@@ -95,6 +113,8 @@ export async function bulkDeleteTaxInvoices(ids: string[]): Promise<Result & { c
   if (g.error) return { ok: false, error: g.error };
   if (ids.length === 0) return { ok: true, count: 0 };
   const db = createAdminClient();
+  const lockErr = await bulkPeriodError(db, ids);
+  if (lockErr) return { ok: false, error: lockErr };
   const { error } = await db.from("tax_invoices").delete().in("id", ids);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/tax-invoices");
