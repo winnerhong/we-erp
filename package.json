@@ -6,7 +6,8 @@
     "dev": "next dev -p 1100",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test tests/payroll.test.ts tests/crm.test.ts tests/aging.test.ts tests/depreciation.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.69.0",

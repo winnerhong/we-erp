@@ -15,6 +15,7 @@ This version (16.x) has breaking changes — APIs, conventions, and file structu
 - 화면: `app/(erp)/` 라우트 그룹 안. 서버 페이지가 데이터를 받아 `*-client.tsx` 래퍼에 넘김(렌더 함수는 클라이언트에서 정의).
 - 한글 주석·라벨 사용.
 - 개발: `npm run dev` (포트 1100).
+- 테스트: `npm test` — 핵심 순수함수(급여·부가세·채권Aging·감가상각) 유닛테스트. Node 내장 러너(`node --test --experimental-strip-types`, 설치 불필요). 계산 로직 수정 시 반드시 통과 확인.
 
 # Phase 진행
 - [x] Phase 0 — 기초 등록(사업자/거래처/직원/계정과목) + CSV 일괄등록 + 사업자 선택/대시보드
