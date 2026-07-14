@@ -49,13 +49,12 @@ export async function createCertificate(v: NewCertificate): Promise<Result> {
     .eq("company_id", v.company_id)
     .gte("issued_on", `${year}-01-01`)
     .lte("issued_on", `${year}-12-31`);
-  const certNo = `${year}-${String((count ?? 0) + 1).padStart(3, "0")}`;
+  const base = (count ?? 0) + 1;
 
   const db = createAdminClient();
-  const { error } = await db.from("employment_certificates").insert({
+  const payload = {
     company_id: v.company_id,
     employee_id: v.employee_id,
-    cert_no: certNo,
     employee_name: v.employee_name,
     birth: v.birth ?? null,
     address: v.address ?? null,
@@ -65,10 +64,18 @@ export async function createCertificate(v: NewCertificate): Promise<Result> {
     hired_on: v.hired_on ?? null,
     purpose: v.purpose ?? null,
     submit_to: v.submit_to ?? null,
-  } as never);
-  if (error) return { ok: false, error: error.message };
-  revalidatePath("/hr");
-  return { ok: true };
+  };
+  // (company_id, cert_no) 유니크 인덱스 + 충돌 시 번호를 올려 재시도(동시 발급 중복 방지)
+  for (let i = 0; i < 20; i++) {
+    const certNo = `${year}-${String(base + i).padStart(3, "0")}`;
+    const { error } = await db.from("employment_certificates").insert({ ...payload, cert_no: certNo } as never);
+    if (!error) {
+      revalidatePath("/hr");
+      return { ok: true };
+    }
+    if (!/duplicate key|unique|23505/i.test(error.message)) return { ok: false, error: error.message };
+  }
+  return { ok: false, error: "발급번호를 배정하지 못했습니다. 다시 시도하세요." };
 }
 
 export async function deleteCertificate(id: string): Promise<Result> {
