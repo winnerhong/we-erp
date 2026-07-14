@@ -34,7 +34,7 @@ import { DocumentIssuePanel } from "@/components/document-issue-panel";
 import { createIssue, saveSignedFile, deleteIssue } from "@/app/(erp)/documents/actions";
 import { HrCardEditor } from "@/components/hr-card-editor";
 import { normalizeHrExtra, HR_SCALAR_FIELDS, type HrScalarField } from "@/lib/hr-card";
-import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
+import { createRow, updateRow, deleteRow, bulkSetRowActive, bulkDeleteRows } from "@/app/(erp)/actions";
 import {
   createCertificate,
   deleteCertificate,
@@ -965,6 +965,23 @@ function EmployeeGrid({
         empty="직원이 없습니다. ‘+ 직원 행 추가’로 시작하세요."
         pageSize={30}
         searchPlaceholder="🔍 이름·닉네임·연락처·소속 검색"
+        selectable
+        renderBulk={(ids, clear) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => startTransition(async () => { await bulkSetRowActive("employees", ids, true); clear(); onChanged(); })}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+            >재직(활성)</button>
+            <button
+              onClick={() => startTransition(async () => { await bulkSetRowActive("employees", ids, false); clear(); onChanged(); })}
+              className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+            >비활성</button>
+            <button
+              onClick={() => { if (confirm(`선택한 ${ids.length}명을 삭제할까요? 되돌릴 수 없습니다.`)) startTransition(async () => { await bulkDeleteRows("employees", ids); clear(); onChanged(); }); }}
+              className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100"
+            >🗑 삭제</button>
+          </div>
+        )}
       />
     </div>
   );
