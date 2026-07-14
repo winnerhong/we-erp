@@ -531,14 +531,11 @@ export function PartnersClient({
                   {isAdmin && (
                     <>
                       <button
-                        onClick={() => {
-                          if (portalAccount) window.open(`/partners/portal-login/${selected.id}`, "_blank");
-                          else setPortalOpen(true);
-                        }}
-                        title={portalAccount ? "이 거래처로 자동 로그인된 포털을 새 창에서 열기" : "거래처 포털 계정 발급"}
-                        className={`rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30 ${portalAccount ? "bg-white/30 ring-1 ring-white/50" : "bg-white/20"}`}
+                        onClick={() => window.open(`/partners/portal-login/${selected.id}`, "_blank")}
+                        title="이 거래처로 자동 로그인된 포털을 새 창에서 열기 (계정 없으면 자동 발급)"
+                        className="rounded-lg bg-white/30 px-3 py-1.5 text-sm font-medium backdrop-blur ring-1 ring-white/50 hover:bg-white/40"
                       >
-                        🔑 포털{portalAccount ? " ↗" : ""}
+                        🔑 포털 ↗
                       </button>
                       {portalAccount && (
                         <button
