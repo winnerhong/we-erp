@@ -32,6 +32,19 @@ export async function removeStaff(id: string): Promise<Result> {
   return { ok: true };
 }
 
+/** 여러 행사 진행상태 일괄변경. */
+export async function bulkSetEventStatus(ids: string[], status: string): Promise<Result & { count?: number }> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  if (ids.length === 0) return { ok: true, count: 0 };
+  const db = createAdminClient();
+  const { error } = await db.from("contracts").update({ status, updated_at: new Date().toISOString() } as never).in("id", ids).eq("type", "EVENT");
+  if (error) return { ok: false, error: error.message };
+  revalidatePath("/events");
+  revalidatePath("/partners");
+  return { ok: true, count: ids.length };
+}
+
 /** 행사 진행상태 변경(준비/진행/완료 = contracts.status). */
 export async function setEventStatus(contractId: string, status: string): Promise<Result> {
   const g = await ensureUser();

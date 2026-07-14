@@ -71,6 +71,21 @@ export async function createApproval(input: ApprovalInput): Promise<Result> {
 }
 
 /** 현재 단계 결재자가 승인/반려. */
+/** 내 결재 대기 문서 일괄 승인. 각 건 actOnApproval 재사용(내 차례 아닌 건 자동 실패→건너뜀). */
+export async function bulkApproveApprovals(ids: string[]): Promise<Result & { count?: number }> {
+  const g = await ensureUser();
+  if (g.error) return { ok: false, error: g.error };
+  let count = 0;
+  let firstErr: string | null = null;
+  for (const id of ids) {
+    const r = await actOnApproval(id, "APPROVE", "");
+    if (!r.ok) { if (!firstErr) firstErr = r.error ?? null; continue; }
+    count++;
+  }
+  if (count === 0 && firstErr) return { ok: false, error: firstErr };
+  return { ok: true, count };
+}
+
 export async function actOnApproval(approvalId: string, decision: "APPROVE" | "REJECT", comment?: string): Promise<Result> {
   const g = await ensureUser();
   if (g.error) return { ok: false, error: g.error };

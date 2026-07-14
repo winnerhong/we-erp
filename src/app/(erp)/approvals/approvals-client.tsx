@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { krw } from "@/lib/labels";
 import type { ApprovalRow, ApprovalStepRow } from "@/lib/supabase/database.types";
-import { createApproval, actOnApproval, cancelApproval } from "./actions";
+import { createApproval, actOnApproval, cancelApproval, bulkApproveApprovals } from "./actions";
+import { useTableSelection, BulkBar, BulkButton } from "@/components/bulk-select";
 
 type UserOpt = { id: string; name: string; role: string };
 
@@ -57,6 +58,18 @@ export function ApprovalsClient({
 
   const detail = detailId ? approvals.find((a) => a.id === detailId) ?? null : null;
 
+  const sel = useTableSelection(list);
+  const [bulkPending, startBulk] = useTransition();
+  const canBulk = tab === "todo";
+  function runBulkApprove() {
+    startBulk(async () => {
+      const r = await bulkApproveApprovals(sel.selected);
+      if (!r.ok) { alert(r.error); return; }
+      sel.clear();
+      router.refresh();
+    });
+  }
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -85,6 +98,12 @@ export function ApprovalsClient({
         ))}
       </div>
 
+      {canBulk && (
+        <BulkBar count={sel.count} onClear={sel.clear}>
+          <BulkButton onClick={runBulkApprove} disabled={bulkPending}>✔ 일괄 승인</BulkButton>
+        </BulkBar>
+      )}
+
       {list.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-16 text-center text-sm text-neutral-400">
           {tab === "todo" ? "결재할 문서가 없습니다 👍" : tab === "mine" ? "올린 결재가 없습니다." : "결재 문서가 없습니다."}
@@ -96,10 +115,19 @@ export function ApprovalsClient({
             const done = steps.filter((s) => s.status === "APPROVED").length;
             const st = STATUS[a.status] ?? STATUS.PENDING;
             return (
+              <div key={a.id} className="flex items-center gap-2">
+                {canBulk && (
+                  <input
+                    type="checkbox"
+                    checked={sel.isSelected(a.id)}
+                    onChange={() => sel.toggle(a.id)}
+                    aria-label="선택"
+                    className="h-4 w-4 shrink-0 cursor-pointer rounded border-neutral-300 accent-indigo-500"
+                  />
+                )}
               <button
-                key={a.id}
                 onClick={() => setDetailId(a.id)}
-                className="flex w-full items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left hover:border-neutral-300"
+                className={`flex w-full items-center gap-3 rounded-xl border bg-white px-4 py-3 text-left hover:border-neutral-300 ${sel.isSelected(a.id) && canBulk ? "border-indigo-300 ring-1 ring-indigo-200" : "border-neutral-200"}`}
               >
                 <span className="shrink-0 rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-500">{DOC_TYPE[a.doc_type] ?? a.doc_type}</span>
                 <span className="min-w-0 flex-1">
@@ -114,6 +142,7 @@ export function ApprovalsClient({
                 {a.amount != null && <span className="shrink-0 tabular-nums text-sm font-semibold text-neutral-700">{krw(a.amount)}</span>}
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
               </button>
+              </div>
             );
           })}
         </div>

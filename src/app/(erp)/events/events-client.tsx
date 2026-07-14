@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { krw } from "@/lib/labels";
-import { assignStaff, removeStaff, setEventStatus } from "./actions";
+import { assignStaff, removeStaff, setEventStatus, bulkSetEventStatus } from "./actions";
+import { useTableSelection, BulkBar, BulkButton } from "@/components/bulk-select";
 
 interface Staff { id: string; employeeId: string | null; employeeName: string; role: string | null }
 export interface EventItem {
@@ -21,12 +22,28 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 export function EventsClient({ items, employees, today }: { items: EventItem[]; employees: Emp[]; today: string }) {
+  const router = useRouter();
+  const [bulkPending, startBulk] = useTransition();
   const upcoming = items.filter((e) => !e.eventDate || e.eventDate >= today);
   const past = items.filter((e) => e.eventDate && e.eventDate < today);
+  const sel = useTableSelection(items);
+  const runBulk = (status: string) =>
+    startBulk(async () => {
+      const r = await bulkSetEventStatus(sel.selected, status);
+      if (!r.ok) { alert(r.error); return; }
+      sel.clear();
+      router.refresh();
+    });
 
   return (
     <div>
       <PageHeader title="🎪 행사 관리" description="체육행사 일정 · 투입 인력 배정 · 진행상태" />
+      <BulkBar count={sel.count} onClear={sel.clear}>
+        <span className="text-xs text-neutral-500">상태 일괄변경:</span>
+        <BulkButton onClick={() => runBulk("DRAFT")} disabled={bulkPending}>준비</BulkButton>
+        <BulkButton onClick={() => runBulk("ACTIVE")} disabled={bulkPending}>진행</BulkButton>
+        <BulkButton onClick={() => runBulk("ENDED")} disabled={bulkPending}>완료</BulkButton>
+      </BulkBar>
       {items.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-neutral-200 px-4 py-16 text-center text-sm text-neutral-400">
           등록된 행사가 없습니다. 거래처 상세 → 계약 탭에서 <b>체육행사</b> 계약을 등록하면 여기에 표시됩니다.
@@ -36,13 +53,13 @@ export function EventsClient({ items, employees, today }: { items: EventItem[]; 
           {upcoming.length > 0 && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold text-neutral-500">예정 행사 <span className="text-neutral-400">{upcoming.length}</span></h3>
-              {upcoming.map((e) => <EventCard key={e.id} e={e} employees={employees} today={today} />)}
+              {upcoming.map((e) => <EventCard key={e.id} e={e} employees={employees} today={today} selected={sel.isSelected(e.id)} onToggle={() => sel.toggle(e.id)} />)}
             </section>
           )}
           {past.length > 0 && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold text-neutral-500">지난 행사 <span className="text-neutral-400">{past.length}</span></h3>
-              {past.map((e) => <EventCard key={e.id} e={e} employees={employees} today={today} />)}
+              {past.map((e) => <EventCard key={e.id} e={e} employees={employees} today={today} selected={sel.isSelected(e.id)} onToggle={() => sel.toggle(e.id)} />)}
             </section>
           )}
         </div>
@@ -51,7 +68,7 @@ export function EventsClient({ items, employees, today }: { items: EventItem[]; 
   );
 }
 
-function EventCard({ e, employees, today }: { e: EventItem; employees: Emp[]; today: string }) {
+function EventCard({ e, employees, today, selected, onToggle }: { e: EventItem; employees: Emp[]; today: string; selected: boolean; onToggle: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [empId, setEmpId] = useState("");
@@ -62,9 +79,17 @@ function EventCard({ e, employees, today }: { e: EventItem; employees: Emp[]; to
     startTransition(async () => { const r = await fn(); if (!r.ok) alert(r.error); else router.refresh(); });
 
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+    <div className={`rounded-2xl border bg-white p-4 ${selected ? "border-indigo-300 ring-1 ring-indigo-200" : "border-neutral-200"}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="flex min-w-0 gap-3">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            aria-label="선택"
+            className="mt-1 h-4 w-4 shrink-0 cursor-pointer rounded border-neutral-300 accent-indigo-500"
+          />
+          <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-lg">🎪</span>
             <h4 className="font-bold text-neutral-800">{e.name}</h4>
@@ -79,6 +104,7 @@ function EventCard({ e, employees, today }: { e: EventItem; employees: Emp[]; to
             {e.amount != null && <span>💰 {krw(e.amount)}</span>}
           </div>
           {e.programs && <p className="mt-1.5 rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-600">{e.programs}</p>}
+          </div>
         </div>
         <select value={e.status} disabled={pending} onChange={(ev) => run(() => setEventStatus(e.id, ev.target.value))} className="rounded-lg border border-neutral-300 px-2 py-1 text-xs">
           {Object.entries(STATUS).map(([v, s]) => <option key={v} value={v}>{s.label}</option>)}
