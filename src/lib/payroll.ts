@@ -126,6 +126,83 @@ export function freelanceWithholding(amount: number, ratePct: number): Withholdi
   return { gross, tax, income, local: tax - income, net: gross - tax };
 }
 
+// ---------- 근로소득세 원천징수(추정) ----------
+// 국세청 근로소득 간이세액표에 대응하는 근사. 연말정산 방식(연환산→과세표준→누진세율→근로소득세액공제)을
+// 12로 나눠 월 원천징수를 추정한다. 실제 간이세액표와 소폭 차이날 수 있어 검수·조정 대상.
+// 부양가족수(본인 포함)를 인적공제로 반영. 세율·공제는 2023년 개정 기준(변동 시 이 상수만 갱신).
+
+/** 종합소득세 누진세율(과세표준, 세율, 누진공제). */
+const INCOME_TAX_BRACKETS: { upto: number; rate: number; deduct: number }[] = [
+  { upto: 14_000_000, rate: 0.06, deduct: 0 },
+  { upto: 50_000_000, rate: 0.15, deduct: 1_260_000 },
+  { upto: 88_000_000, rate: 0.24, deduct: 5_760_000 },
+  { upto: 150_000_000, rate: 0.35, deduct: 15_440_000 },
+  { upto: 300_000_000, rate: 0.38, deduct: 19_940_000 },
+  { upto: 500_000_000, rate: 0.40, deduct: 25_940_000 },
+  { upto: 1_000_000_000, rate: 0.42, deduct: 35_940_000 },
+  { upto: Infinity, rate: 0.45, deduct: 65_940_000 },
+];
+
+/** 근로소득공제(총급여 기준, 한도 2천만원). */
+function earnedIncomeDeduction(gross: number): number {
+  let d: number;
+  if (gross <= 5_000_000) d = gross * 0.7;
+  else if (gross <= 15_000_000) d = 3_500_000 + (gross - 5_000_000) * 0.4;
+  else if (gross <= 45_000_000) d = 7_500_000 + (gross - 15_000_000) * 0.15;
+  else if (gross <= 100_000_000) d = 12_000_000 + (gross - 45_000_000) * 0.05;
+  else d = 14_750_000 + (gross - 100_000_000) * 0.02;
+  return Math.min(d, 20_000_000);
+}
+
+/** 근로소득 세액공제(산출세액 기준, 총급여별 한도). */
+function earnedIncomeTaxCredit(computed: number, gross: number): number {
+  const credit = computed <= 1_300_000 ? computed * 0.55 : 715_000 + (computed - 1_300_000) * 0.3;
+  let cap: number;
+  if (gross <= 33_000_000) cap = 740_000;
+  else if (gross <= 70_000_000) cap = Math.max(660_000, 740_000 - (gross - 33_000_000) * 0.008);
+  else cap = Math.max(500_000, 660_000 - ((gross - 70_000_000) / 2));
+  return Math.min(credit, cap);
+}
+
+/** 자녀세액공제(연): 1명 15만, 2명 35만, 3명+ 35만 + 30만×(n-2). */
+function childTaxCredit(children: number): number {
+  const n = Math.max(0, Math.floor(children || 0));
+  if (n <= 0) return 0;
+  if (n === 1) return 150_000;
+  if (n === 2) return 350_000;
+  return 350_000 + (n - 2) * 300_000;
+}
+
+/**
+ * 월 근로소득세(소득세) 원천징수 추정. 간이세액표 근사(연환산 방식).
+ * @param monthlyTaxable 월 과세급여(기본급+과세수당; 비과세 제외)
+ * @param dependents 공제대상 부양가족수(본인 포함, 최소 1)
+ * @param childrenUnder20 8~20세 자녀 수(자녀세액공제)
+ */
+export function estimateIncomeTax(monthlyTaxable: number, dependents = 1, childrenUnder20 = 0): number {
+  const m = Math.max(0, monthlyTaxable);
+  const deps = Math.max(1, Math.floor(dependents || 1));
+  const grossYear = m * 12;
+  if (grossYear <= 0) return 0;
+  const earnedIncome = grossYear - earnedIncomeDeduction(grossYear); // 근로소득금액
+  const personal = deps * 1_500_000; // 인적공제(기본공제 1인당 150만)
+  // 4대보험 근로자부담은 소득공제(연금보험료공제·특별소득공제) — 연액을 과세표준에서 차감
+  const insuranceDeduction = estimateInsurance(m).total * 12;
+  const taxBase = Math.max(0, earnedIncome - personal - insuranceDeduction); // 과세표준(근사)
+  if (taxBase <= 0) return 0;
+  const br = INCOME_TAX_BRACKETS.find((b) => taxBase <= b.upto)!;
+  const computed = taxBase * br.rate - br.deduct; // 산출세액
+  // 세액공제: 근로소득세액공제 + 표준세액공제(13만) + 자녀세액공제
+  const credit = earnedIncomeTaxCredit(computed, grossYear) + 130_000 + childTaxCredit(childrenUnder20);
+  const afterCredit = Math.max(0, computed - credit);
+  return Math.max(0, Math.round(afterCredit / 12 / 10) * 10); // 월 환산, 10원 절사
+}
+
+/** 지방소득세 = 소득세 × 10%(10원 절사). */
+export function localIncomeTax(incomeTax: number): number {
+  return Math.round((Math.max(0, incomeTax) * 0.1) / 10) * 10;
+}
+
 export interface PayrollCalc {
   base_pay: number;
   allowance: number;

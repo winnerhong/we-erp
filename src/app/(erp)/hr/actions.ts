@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { estimateInsurance, computeNet } from "@/lib/payroll";
+import { estimateInsurance, computeNet, estimateIncomeTax, localIncomeTax } from "@/lib/payroll";
 import { ensureUser, ensureCompanyAccess, guardCompanyRow } from "@/lib/auth-guard";
 import type {
   LeaveRequestRow,
@@ -221,6 +221,9 @@ export async function generatePayrolls(
           ? Math.round((e.hourly_wage * (workMin.get(e.id) ?? 0)) / 60)
           : e.base_salary ?? 0;
       const insurance = estimateInsurance(base).total;
+      // 소득세(간이세액 추정) + 지방소득세(10%) 합산 원천징수. 부양가족수 반영(null=본인 1).
+      const incomeTax = estimateIncomeTax(base, e.dependents ?? 1, e.children_under20 ?? 0);
+      const withhold = incomeTax + localIncomeTax(incomeTax);
       return {
         company_id: companyId,
         employee_id: e.id,
@@ -228,14 +231,14 @@ export async function generatePayrolls(
         base_pay: base,
         allowance: 0,
         nontax_allowance: 0,
-        income_tax: 0,
+        income_tax: withhold,
         insurance,
         other_deduction: 0,
         net_pay: computeNet({
           base_pay: base,
           allowance: 0,
           nontax_allowance: 0,
-          income_tax: 0,
+          income_tax: withhold,
           insurance,
           other_deduction: 0,
         }),
