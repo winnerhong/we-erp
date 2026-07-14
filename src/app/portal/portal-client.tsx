@@ -206,6 +206,7 @@ function FinanceTab({ ledger, settlements }: { ledger: Ledger[]; settlements: Se
                     <th className="px-4 py-2.5">기간</th>
                     <th className="px-4 py-2.5 text-right">금액</th>
                     <th className="px-4 py-2.5 text-center">상태</th>
+                    <th className="px-4 py-2.5 text-center">명세서</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-50">
@@ -218,6 +219,16 @@ function FinanceTab({ ledger, settlements }: { ledger: Ledger[]; settlements: Se
                         <td className="px-4 py-2.5 text-right tabular-nums font-medium">{krw(s.total)}</td>
                         <td className="px-4 py-2.5 text-center">
                           <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${st.cls}`}>{st.label}</span>
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <a
+                            href={`/portal/statement/${s.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                          >
+                            🧾 명세서
+                          </a>
                         </td>
                       </tr>
                     );
