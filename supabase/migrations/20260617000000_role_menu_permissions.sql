@@ -19,6 +19,8 @@ do $$ begin
 end $$;
 
 -- 일반(MEMBER) 기본값: 모든 메뉴 허용(이후 관리 화면에서 끄기)
+-- ※ on conflict 대상 컬럼을 명시하지 않음: 이후 20260739 에서 이 테이블 PK 를 대리키로 바꾸며
+--    (role, menu_key) 유니크가 사라지므로, 전체 파일 재실행 시에도 안전하도록 target 없는 형태 사용.
 insert into role_menu_permissions (role, menu_key, allowed) values
   ('MEMBER','/',true),
   ('MEMBER','/daily',true),
@@ -31,4 +33,4 @@ insert into role_menu_permissions (role, menu_key, allowed) values
   ('MEMBER','/bank',true),
   ('MEMBER','/purchases',true),
   ('MEMBER','/hr',true)
-on conflict (role, menu_key) do nothing;
+on conflict do nothing;
