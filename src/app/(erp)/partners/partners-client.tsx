@@ -528,21 +528,28 @@ export function PartnersClient({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => window.open(`/partners?p=${selected.id}`, "_blank", "noopener")}
-                    title="이 거래처를 새 창에서 열기"
-                    className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30"
-                  >
-                    🪟 새창
-                  </button>
                   {isAdmin && (
-                    <button
-                      onClick={() => setPortalOpen(true)}
-                      title="거래처 포털 로그인 계정 관리"
-                      className={`rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30 ${portalAccount ? "bg-white/30 ring-1 ring-white/50" : "bg-white/20"}`}
-                    >
-                      🔑 포털{portalAccount ? " ✓" : ""}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          if (portalAccount) window.open(`/partners/portal-login/${selected.id}`, "_blank");
+                          else setPortalOpen(true);
+                        }}
+                        title={portalAccount ? "이 거래처로 자동 로그인된 포털을 새 창에서 열기" : "거래처 포털 계정 발급"}
+                        className={`rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30 ${portalAccount ? "bg-white/30 ring-1 ring-white/50" : "bg-white/20"}`}
+                      >
+                        🔑 포털{portalAccount ? " ↗" : ""}
+                      </button>
+                      {portalAccount && (
+                        <button
+                          onClick={() => setPortalOpen(true)}
+                          title="포털 계정 관리 (비밀번호·삭제)"
+                          className="rounded-lg bg-white/20 px-2.5 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30"
+                        >
+                          ⚙
+                        </button>
+                      )}
+                    </>
                   )}
                   <button onClick={() => setEditOpen(true)} className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30">
                     ✏️ 수정
