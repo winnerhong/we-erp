@@ -979,6 +979,7 @@ function PayTab({ payrolls }: { payrolls: PayrollRow[] }) {
                 <th className="px-3 py-2 text-right">수당</th>
                 <th className="px-3 py-2 text-right">공제</th>
                 <th className="px-5 py-2 text-right">실수령</th>
+                <th className="px-3 py-2 text-center">명세서</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-50">
@@ -989,6 +990,9 @@ function PayTab({ payrolls }: { payrolls: PayrollRow[] }) {
                   <td className="px-3 py-2 text-right tabular">{krw(p.allowance + p.nontax_allowance)}</td>
                   <td className="px-3 py-2 text-right tabular text-rose-600">−{krw(p.income_tax + p.insurance + p.other_deduction)}</td>
                   <td className="px-5 py-2 text-right tabular font-semibold">{krw(p.net_pay)}</td>
+                  <td className="px-3 py-2 text-center">
+                    <a href={`/me/payslip/${p.id}`} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-neutral-300 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50">🧾 보기</a>
+                  </td>
                 </tr>
               ))}
             </tbody>
