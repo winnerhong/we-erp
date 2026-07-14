@@ -14,6 +14,7 @@ import type { ImportCtx } from "@/lib/import-specs";
 import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
 import { importPartnersFromWks, bulkAssignCompany } from "./actions";
 import { addPartnerMemo, deletePartnerMemo } from "./crm-actions";
+import { createPartnerAccount, resetPartnerPassword, deletePartnerAccount } from "./portal-actions";
 import { CrmKpis, ContractsTab, TransactionsTab, SettlementsTab, AttachmentsTab } from "./crm-panel";
 import { HoverPreview, type PreviewData } from "@/components/hover-preview";
 import { PARTNER_KIND_LABEL, TAX_CATEGORY_LABEL, PAYMENT_TERMS_LABEL, PAYMENT_CYCLE_LABEL, EVIDENCE_TYPE_LABEL } from "@/lib/crm";
@@ -139,6 +140,8 @@ export function PartnersClient({
   employees,
   receivable,
   payable,
+  isAdmin,
+  portalAccount,
 }: {
   rows: PartnerRow[];
   ctx: ImportCtx;
@@ -155,9 +158,12 @@ export function PartnersClient({
   employees: { id: string; name: string }[];
   receivable: number;
   payable: number;
+  isAdmin: boolean;
+  portalAccount: { email: string | null; active: boolean } | null;
 }) {
   const router = useRouter();
   const [mgrOpen, setMgrOpen] = useState(false);
+  const [portalOpen, setPortalOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -522,6 +528,22 @@ export function PartnersClient({
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => window.open(`/partners?p=${selected.id}`, "_blank", "noopener")}
+                    title="이 거래처를 새 창에서 열기"
+                    className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30"
+                  >
+                    🪟 새창
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setPortalOpen(true)}
+                      title="거래처 포털 로그인 계정 관리"
+                      className={`rounded-lg px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30 ${portalAccount ? "bg-white/30 ring-1 ring-white/50" : "bg-white/20"}`}
+                    >
+                      🔑 포털{portalAccount ? " ✓" : ""}
+                    </button>
+                  )}
                   <button onClick={() => setEditOpen(true)} className="rounded-lg bg-white/20 px-3 py-1.5 text-sm font-medium backdrop-blur hover:bg-white/30">
                     ✏️ 수정
                   </button>
@@ -820,7 +842,110 @@ export function PartnersClient({
           }}
         />
       )}
+      {portalOpen && selected && (
+        <PartnerPortalModal
+          partnerId={selected.id}
+          partnerName={selected.name}
+          account={portalAccount}
+          onClose={() => setPortalOpen(false)}
+          onChanged={() => router.refresh()}
+        />
+      )}
     </div>
+  );
+}
+
+// ---------- 거래처 포털 계정 관리(관리자) ----------
+function PartnerPortalModal({
+  partnerId,
+  partnerName,
+  account,
+  onClose,
+  onChanged,
+}: {
+  partnerId: string;
+  partnerName: string;
+  account: { email: string | null; active: boolean } | null;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function create() {
+    setError(null);
+    startTransition(async () => {
+      const r = await createPartnerAccount(partnerId, email, pw);
+      if (!r.ok) { setError(r.error ?? "발급 실패"); return; }
+      onChanged();
+      onClose();
+    });
+  }
+  function reset() {
+    if (pw.length < 6) { setError("새 비밀번호(6자 이상)를 입력하세요"); return; }
+    setError(null);
+    startTransition(async () => {
+      const r = await resetPartnerPassword(partnerId, pw);
+      if (!r.ok) { setError(r.error ?? "재설정 실패"); return; }
+      alert("비밀번호가 재설정되었습니다.");
+      setPw("");
+    });
+  }
+  function remove() {
+    if (!confirm(`${partnerName} 포털 계정을 삭제할까요? 거래처는 더 이상 로그인할 수 없습니다.`)) return;
+    startTransition(async () => {
+      const r = await deletePartnerAccount(partnerId);
+      if (!r.ok) { setError(r.error ?? "삭제 실패"); return; }
+      onChanged();
+      onClose();
+    });
+  }
+
+  return (
+    <PartnerModal title={`🔑 포털 계정 — ${partnerName}`} onClose={onClose}>
+      <div className="space-y-3 p-5">
+        <p className="rounded-lg bg-neutral-50 p-3 text-xs text-neutral-500">
+          거래처가 직접 로그인해 <b>수업 진도·거래/정산·세금계산서·문서/공지</b>를 조회하는 계정입니다.
+          발급 후 이메일·비밀번호를 거래처에 전달하세요. (거래처는 조회만 가능)
+        </p>
+        {account ? (
+          <>
+            <Field label="현재 계정(이메일)">
+              <TextInput value={account.email ?? ""} readOnly className="bg-neutral-50" />
+            </Field>
+            <Field label="비밀번호 재설정 (6자 이상)">
+              <TextInput value={pw} onChange={(e) => setPw(e.target.value)} placeholder="새 임시 비밀번호" />
+            </Field>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex justify-between gap-2 pt-1">
+              <button onClick={remove} disabled={pending} className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-50">
+                계정 삭제
+              </button>
+              <button onClick={reset} disabled={pending} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">
+                {pending ? "처리 중…" : "비밀번호 재설정"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <Field label="로그인 이메일" required>
+              <TextInput type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="거래처 로그인 이메일" />
+            </Field>
+            <Field label="임시 비밀번호 (6자 이상)" required>
+              <TextInput value={pw} onChange={(e) => setPw(e.target.value)} placeholder="임시 비밀번호" />
+            </Field>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end pt-1">
+              <button onClick={create} disabled={pending || !email.trim() || pw.length < 6} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400 disabled:opacity-50">
+                {pending ? "발급 중…" : "포털 계정 발급"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </PartnerModal>
   );
 }
 

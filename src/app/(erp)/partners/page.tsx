@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getImportCtx } from "@/lib/queries";
 import { getCompanyContext, companyFilter } from "@/lib/active-company";
+import { getCurrentProfile } from "@/lib/auth-guard";
 import { PartnersClient, type LedgerEntry } from "./partners-client";
 import { toPaybackBrief, type PaybackBrief } from "@/components/payback-list";
 import type { PartnerRow, FieldOptionRow, PaybackRow, ContractRow, TransactionRow, SettlementRow, PartnerAttachmentRow, PartnerMemoRow } from "@/lib/supabase/database.types";
@@ -148,6 +149,17 @@ export default async function PartnersPage({
     paybacks = pbRows.map((p) => toPaybackBrief(p, pbDate, pbDesc));
   }
 
+  // 뷰어 권한 + 선택 거래처의 포털 계정 존재 여부(관리자만 발급/관리)
+  const [profileMe, acctRes] = await Promise.all([
+    getCurrentProfile(),
+    selectedId
+      ? supabase.from("profiles").select("email, is_active").eq("partner_id", selectedId).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const isAdmin = profileMe?.role === "ADMIN";
+  const acct = acctRes.data as { email: string | null; is_active: boolean } | null;
+  const portalAccount = acct ? { email: acct.email, active: acct.is_active } : null;
+
   return (
     <PartnersClient
       rows={rows}
@@ -165,6 +177,8 @@ export default async function PartnersPage({
       employees={employees}
       receivable={receivable}
       payable={payable}
+      isAdmin={isAdmin}
+      portalAccount={portalAccount}
     />
   );
 }

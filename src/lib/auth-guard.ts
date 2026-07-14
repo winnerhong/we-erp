@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { createClient } from "./supabase/server";
 import { createAdminClient } from "./supabase/admin";
-import type { ProfileRow, EmployeeRow } from "./supabase/database.types";
+import type { ProfileRow, EmployeeRow, PartnerRow } from "./supabase/database.types";
 
 /** 현재 로그인 사용자의 프로필(없으면 null).
  *  React cache 로 요청 단위 메모이즈 — 한 요청에서 여러 가드가 호출해도 실제 조회는 1회. */
@@ -20,12 +20,35 @@ export interface Guard {
   error?: string;
 }
 
-/** 로그인 + 활성 사용자 보장. 서버액션 맨 앞에서 호출. */
+/** 로그인 + 활성 사용자(직원/관리자) 보장. 서버액션 맨 앞에서 호출.
+ *  ※ 거래처 포털 계정(partner_id 있음)은 직원 기능을 쓸 수 없으므로 여기서 차단 —
+ *    ensureUser 를 통과해야만 쓰기/조회 액션이 동작하므로 이게 유일 방어선이다. */
 export async function ensureUser(): Promise<Guard> {
   const profile = await getCurrentProfile();
   if (!profile) return { error: "로그인이 필요합니다" };
   if (!profile.is_active) return { error: "비활성화된 계정입니다" };
+  if (profile.partner_id) return { error: "거래처 계정은 이 기능을 사용할 수 없습니다." };
   return { profile };
+}
+
+export interface PartnerGuard {
+  profile?: ProfileRow;
+  partner?: PartnerRow;
+  error?: string;
+}
+
+/** 거래처 포털 전용 가드. 로그인 프로필 ↔ 거래처 레코드 해소.
+ *  반환된 partner.id 로만 데이터를 다뤄 다른 거래처 정보 접근을 막는다(RLS 미의존). */
+export async function ensurePartner(): Promise<PartnerGuard> {
+  const profile = await getCurrentProfile();
+  if (!profile) return { error: "로그인이 필요합니다" };
+  if (!profile.is_active) return { error: "비활성화된 계정입니다" };
+  if (!profile.partner_id) return { error: "거래처 포털 계정이 아닙니다." };
+  const db = createAdminClient();
+  const { data } = await db.from("partners").select("*").eq("id", profile.partner_id).maybeSingle();
+  const partner = data as PartnerRow | null;
+  if (!partner) return { profile, error: "연결된 거래처가 없습니다. 관리자에게 문의하세요." };
+  return { profile, partner };
 }
 
 /** 관리자(ADMIN) 보장. */

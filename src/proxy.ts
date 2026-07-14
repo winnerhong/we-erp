@@ -45,11 +45,26 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // 직원 셀프 서비스(/me)·서류 인쇄(/print)는 누구나(로그인) 접근
+  // 거래처 포털 계정(partner_id 있음)은 /portal 만 접근 가능 — 나머지는 /portal 로.
+  const isPortal = path === "/portal" || path.startsWith("/portal/");
+  if (user && !isLogin) {
+    const { data: pp } = await supabase.from("profiles").select("partner_id").eq("id", user.id).maybeSingle();
+    if ((pp as { partner_id: string | null } | null)?.partner_id) {
+      if (!isPortal) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/portal";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+      return response; // 거래처 계정은 포털만
+    }
+  }
+
+  // 직원 셀프 서비스(/me)·서류 인쇄(/print)는 누구나(로그인) 접근. /portal 은 거래처 전용(직원은 위에서 통과 안 함).
   const isMe = path === "/me" || path.startsWith("/me/");
   const isPrint = path.startsWith("/print/");
 
-  if (user && !isLogin && !isMe && !isPrint) {
+  if (user && !isLogin && !isMe && !isPrint && !isPortal) {
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
     const role = (profile as { role: string } | null)?.role;
     const menu = MENUS.find((m) => m.href !== "/" && (path === m.href || path.startsWith(m.href + "/")));

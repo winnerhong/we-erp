@@ -459,6 +459,8 @@ export interface ProfileRow {
   role: AppRole;
   is_active: boolean;
   created_at: string;
+  /** 채워지면 거래처 포털 전용 계정(직원 기능 접근 불가). */
+  partner_id: string | null;
 }
 
 export type BankDirection = "IN" | "OUT";
