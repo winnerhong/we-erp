@@ -11,7 +11,7 @@ import { krw } from "@/lib/labels";
 import { toneClass } from "@/lib/field-tones";
 import type { PartnerRow, FieldOptionRow, ContractRow, TransactionRow, SettlementRow, PartnerAttachmentRow, PartnerMemoRow } from "@/lib/supabase/database.types";
 import type { ImportCtx } from "@/lib/import-specs";
-import { createRow, updateRow, deleteRow } from "@/app/(erp)/actions";
+import { createRow, updateRow, deleteRow, bulkSetRowActive, bulkDeleteRows } from "@/app/(erp)/actions";
 import { importPartnersFromWks, bulkAssignCompany } from "./actions";
 import { addPartnerMemo, deletePartnerMemo } from "./crm-actions";
 import { createPartnerAccount, resetPartnerPassword, deletePartnerAccount } from "./portal-actions";
@@ -266,6 +266,28 @@ export function PartnersClient({
       router.refresh();
     });
   };
+  const runBulkStatus = (active: boolean) => {
+    const ids = [...picked];
+    if (ids.length === 0) return;
+    if (!confirm(`선택한 ${ids.length}개 거래처를 ${active ? "거래재개" : "거래종료"} 처리할까요?`)) return;
+    startAssign(async () => {
+      const res = await bulkSetRowActive("partners", ids, active);
+      if (!res.ok) { alert(res.error ?? "처리 실패"); return; }
+      exitSelect();
+      router.refresh();
+    });
+  };
+  const runBulkDelete = () => {
+    const ids = [...picked];
+    if (ids.length === 0) return;
+    if (!confirm(`선택한 ${ids.length}개 거래처를 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    startAssign(async () => {
+      const res = await bulkDeleteRows("partners", ids);
+      if (!res.ok) { alert(res.error ?? "삭제 실패"); return; }
+      exitSelect();
+      router.refresh();
+    });
+  };
 
   const ledger = ledgerFilter === "ALL" ? entries : entries.filter((e) => e.source === ledgerFilter);
   const totalIn = ledger.filter((e) => e.direction === "IN").reduce((s, e) => s + e.amount, 0);
@@ -489,6 +511,12 @@ export function PartnersClient({
                 >
                   {assigning ? "배정 중…" : `${picked.size}개 배정`}
                 </button>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-2">
+                <span className="text-xs text-neutral-500">기타 일괄:</span>
+                <button onClick={() => runBulkStatus(false)} disabled={assigning || picked.size === 0} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40">🚫 거래종료</button>
+                <button onClick={() => runBulkStatus(true)} disabled={assigning || picked.size === 0} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-40">♻ 거래재개</button>
+                <button onClick={runBulkDelete} disabled={assigning || picked.size === 0} className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-40">🗑 삭제</button>
               </div>
             </div>
           )}
