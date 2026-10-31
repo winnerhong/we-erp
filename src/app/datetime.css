@@ -1,0 +1,109 @@
+/* 위너 ERP date / time pickers (src/components/date-time.tsx) — Toss style: white surfaces, gray hierarchy,
+   one indigo accent (ERP 메인 버튼 색 = Tailwind indigo-500), weights 500/700/800.
+   globals.css 에서 불러온다. components 레이어 안이라 className 의 Tailwind 유틸리티(w-48 등)로 폭을 바꿀 수 있다. */
+
+@layer components {
+
+.dt-field {
+  --dt-g900: #191f28; --dt-g700: #333d4b; --dt-g600: #4e5968; --dt-g500: #6b7684; --dt-g400: #8b95a1;
+  --dt-g300: #b0b8c1; --dt-g200: #e5e8eb; --dt-g100: #f2f4f6; --dt-g50: #f9fafb;
+  /* indigo-500 (흰 글자 4.58:1) / 흰색 / indigo-50 / indigo-600 (흰 배경 위 6.46:1) */
+  --dt-accent: #615fff; --dt-accent-ink: #ffffff; --dt-accent-50: #eef2ff; --dt-accent-text: #4f39f6;
+  --dt-sun: #f04452; --dt-sat: #3182f6;
+  position: relative; width: 100%; max-width: 100%; word-break: keep-all;
+}
+
+/* field: filled gray, no border */
+.dt-trigger {
+  width: 100%; min-height: 50px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 0 16px; border: 0; border-radius: 12px; background: var(--dt-g100); color: var(--dt-g900);
+  font: inherit; font-size: 16px; font-weight: 700; text-align: left; cursor: pointer; transition: background 0.15s, box-shadow 0.15s;
+}
+.dt-trigger:hover { background: var(--dt-g200); }
+.dt-trigger:focus-visible, .dt-trigger[aria-expanded="true"] { outline: none; background: #fff; box-shadow: inset 0 0 0 2px var(--dt-accent); }
+.dt-trigger[data-empty] span { color: var(--dt-g400); font-weight: 500; }
+.dt-trigger svg { flex-shrink: 0; color: var(--dt-g400); }
+.dt-trigger[aria-expanded="true"] svg { color: var(--dt-accent-text); }
+.dt-trigger:disabled { opacity: 0.5; cursor: default; }
+.dt-field .dt-proxy { position: absolute; left: 12px; bottom: 0; width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; border: 0 !important; opacity: 0; pointer-events: none; }
+.dt-inline { max-width: 320px; margin-top: 8px; }
+
+/* card under the field (desktop) */
+.dt-dim { display: none; }
+.dt-pop {
+  position: absolute; z-index: 60; top: calc(100% + 8px); left: 0; box-sizing: border-box; width: 340px; max-width: calc(100vw - 32px);
+  padding: 20px; border-radius: 20px; background: #fff; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  animation: dt-drop 0.16s ease-out;
+}
+@keyframes dt-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.dt-sheet-head { display: none; }
+
+/* calendar */
+.dt-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.dt-cal-head b { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--dt-g900); }
+.dt-navs { display: flex; gap: 6px; }
+.dt-nav { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: var(--dt-g100); color: var(--dt-g600); cursor: pointer; }
+.dt-nav:hover { background: var(--dt-g200); color: var(--dt-g900); }
+.dt-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 4px; }
+.dt-wd { height: 30px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--dt-g400); }
+.dt-wd[data-sun] { color: var(--dt-sun); }
+.dt-wd[data-sat] { color: var(--dt-sat); }
+.dt-day {
+  position: relative; justify-self: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none;
+  color: var(--dt-g900); font: inherit; font-size: 16px; font-weight: 600; cursor: pointer; transition: background 0.12s;
+}
+.dt-day[data-sun] { color: var(--dt-sun); }
+.dt-day[data-sat] { color: var(--dt-sat); }
+.dt-day:hover:not(:disabled) { background: var(--dt-g100); }
+.dt-day[data-today] { color: var(--dt-accent-text); font-weight: 800; }
+.dt-day[data-today]::after { content: ""; position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 2px; background: var(--dt-accent); }
+.dt-day[aria-pressed="true"] { background: var(--dt-accent); color: var(--dt-accent-ink); font-weight: 800; }
+.dt-day[aria-pressed="true"]::after { background: var(--dt-accent-ink); }
+.dt-day:disabled { color: var(--dt-g300); cursor: default; }
+
+/* footer buttons */
+.dt-foot { display: flex; gap: 8px; margin-top: 16px; }
+.dt-btn { flex: 1; min-height: 44px; border: 0; border-radius: 12px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+.dt-btn:active { transform: scale(0.98); }
+.dt-btn:disabled { opacity: 0.4; cursor: default; }
+.dt-btn-gray { background: var(--dt-g100); color: var(--dt-g600); }
+.dt-btn-gray:hover:not(:disabled) { background: var(--dt-g200); }
+.dt-btn-primary { flex: 2; background: var(--dt-accent); color: var(--dt-accent-ink); }
+.dt-btn-primary:hover { background: var(--dt-accent-text); }
+
+/* time */
+.dt-time { width: 300px; }
+.dt-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--dt-g100); }
+.dt-seg button { min-height: 40px; border: 0; border-radius: 9px; background: none; color: var(--dt-g500); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.dt-seg button[aria-checked="true"] { background: #fff; color: var(--dt-g900); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.dt-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.dt-col { position: relative; display: flex; flex-direction: column; gap: 2px; height: 220px; overflow-y: auto; scrollbar-width: none; }
+.dt-col::-webkit-scrollbar { display: none; }
+.dt-opt { min-height: 44px; flex-shrink: 0; border: 0; border-radius: 12px; background: none; color: var(--dt-g400); font: inherit; font-size: 17px; font-weight: 600; cursor: pointer; }
+.dt-opt:hover { background: var(--dt-g50); color: var(--dt-g700); }
+.dt-opt[aria-pressed="true"] { background: var(--dt-g100); color: var(--dt-g900); font-weight: 800; }
+
+/* phone: bottom sheet */
+@media (max-width: 600px) {
+  .dt-dim { display: block; position: fixed; inset: 0; z-index: 400; background: rgba(0, 0, 0, 0.45); animation: dt-fade 0.2s ease-out; }
+  .dt-pop {
+    position: fixed; z-index: 401; top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-width: none;
+    padding: 8px 20px calc(20px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0;
+    box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12); animation: dt-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .dt-time { width: 100%; }
+  .dt-sheet-head { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .dt-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--dt-g200); }
+  .dt-sheet-head b { align-self: flex-start; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--dt-g900); }
+  .dt-day { width: 44px; height: 44px; }
+  .dt-btn { min-height: 54px; font-size: 17px; border-radius: 16px; }
+  .dt-col { height: 240px; }
+}
+@keyframes dt-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dt-up { from { transform: translateY(100%); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dt-pop, .dt-dim { animation: none; } }
+
+/* any native date/time input that slips through (datetime-local, month 등) still uses the ERP colors */
+input[type="date"], input[type="time"], input[type="datetime-local"], input[type="month"] { accent-color: #615fff; color-scheme: light; }
+
+}

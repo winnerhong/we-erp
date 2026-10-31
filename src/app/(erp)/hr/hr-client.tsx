@@ -29,6 +29,7 @@ import {
   createCertificate,
   deleteCertificate,
 } from "./actions";
+import { DateField } from "@/components/date-time";
 
 const leaveTypeOptions = Object.entries(LEAVE_TYPE_LABEL) as [LeaveType, string][];
 
@@ -428,7 +429,7 @@ function CertModal({
           </Field>
         </div>
         <Field label="생년월일/주민번호"><TextInput value={d.birth} onChange={(e) => setD({ ...d, birth: e.target.value })} placeholder="1990-01-01" /></Field>
-        <Field label="입사일"><TextInput type="date" value={d.hired_on} onChange={(e) => setD({ ...d, hired_on: e.target.value })} /></Field>
+        <Field label="입사일"><DateField value={d.hired_on} onChange={(v) => setD({ ...d, hired_on: v })} /></Field>
         <Field label="직위"><TextInput value={d.position} onChange={(e) => setD({ ...d, position: e.target.value })} placeholder="대리" /></Field>
         <Field label="부서"><TextInput value={d.department} onChange={(e) => setD({ ...d, department: e.target.value })} placeholder="영업부" /></Field>
         <Field label="고용형태"><TextInput value={d.employment_type} onChange={(e) => setD({ ...d, employment_type: e.target.value })} /></Field>
@@ -662,14 +663,14 @@ function LeaveModal({
         </Field>
         <Field label="일수"><TextInput inputMode="decimal" value={d.days} onChange={(e) => setD({ ...d, days: e.target.value })} /></Field>
         <Field label="시작일">
-          <TextInput type="date" value={d.start_date} onChange={(e) => {
-            const next = { ...d, start_date: e.target.value, end_date: d.end_date || e.target.value };
+          <DateField value={d.start_date} onChange={(v) => {
+            const next = { ...d, start_date: v, end_date: d.end_date || v };
             setD({ ...next, days: recalcDays(next) });
           }} />
         </Field>
         <Field label="종료일">
-          <TextInput type="date" value={d.end_date} onChange={(e) => {
-            const next = { ...d, end_date: e.target.value };
+          <DateField value={d.end_date} onChange={(v) => {
+            const next = { ...d, end_date: v };
             setD({ ...next, days: recalcDays(next) });
           }} />
         </Field>

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { managerSetSessionDone, bulkSetSessionsDone } from "@/app/(erp)/partners/crm-actions";
 import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
+import { DateField } from "@/components/date-time";
 
 export interface SessionItem {
   id: string;
@@ -69,7 +70,7 @@ export function SessionsClient({ date, sessions }: { date: string; sessions: Ses
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-1 rounded-lg border border-neutral-200 bg-white p-1">
           <button onClick={() => router.push(`/sessions?d=${shiftDate(date, -1)}`)} className="rounded px-2 py-1 text-sm hover:bg-neutral-100">‹</button>
-          <input type="date" value={date} onChange={(e) => router.push(`/sessions?d=${e.target.value}`)} className="rounded px-2 py-1 text-sm tabular-nums" />
+          <DateField value={date} onChange={(v) => router.push(`/sessions?d=${v}`)} className="w-60" />
           <button onClick={() => router.push(`/sessions?d=${shiftDate(date, 1)}`)} className="rounded px-2 py-1 text-sm hover:bg-neutral-100">›</button>
         </div>
         <StatPill label="총 수업" value={`${sessions.length}`} />

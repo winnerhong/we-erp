@@ -8,6 +8,7 @@ import type { TaxInvoiceRow } from "@/lib/supabase/database.types";
 import { createTrade, updateTrade, deleteTrade, linkInvoiceToBankTxn, unlinkInvoiceBank, bulkDeleteTrades, bulkSetTradeAccount } from "./actions";
 import { BankTradeTabs } from "@/components/bank-trade-tabs";
 import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
+import { DateField } from "@/components/date-time";
 
 type Account = { id: string; code: string; name: string };
 
@@ -530,7 +531,7 @@ function AddTradeModal({
             </SelectInput>
           </Field>
         </div>
-        <Field label="거래일자"><TextInput type="date" value={d.doc_date} onChange={(e) => setD({ ...d, doc_date: e.target.value })} /></Field>
+        <Field label="거래일자"><DateField value={d.doc_date} onChange={(v) => setD({ ...d, doc_date: v })} /></Field>
         <Field label="증빙구분">
           <SelectInput value={d.evidence} onChange={(e) => setD({ ...d, evidence: e.target.value })}>
             {EVIDENCE.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -547,7 +548,7 @@ function AddTradeModal({
         <Field label="공급가액"><NumberInput value={d.supply} onChange={(v) => onSupply(v)} /></Field>
         <Field label="세액"><NumberInput value={d.vat} onChange={(v) => setD({ ...d, vat: v })} /></Field>
         <Field label="합계"><NumberInput value={d.total} onChange={(v) => setD({ ...d, total: v })} /></Field>
-        <Field label="결제예정일"><TextInput type="date" value={d.due_date} onChange={(e) => setD({ ...d, due_date: e.target.value })} /></Field>
+        <Field label="결제예정일"><DateField value={d.due_date} onChange={(v) => setD({ ...d, due_date: v })} /></Field>
         <div className="col-span-2">
           <Field label="메모"><TextInput value={d.memo} onChange={(e) => setD({ ...d, memo: e.target.value })} /></Field>
         </div>

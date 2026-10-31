@@ -22,6 +22,7 @@ import {
   bulkDeleteTaxInvoices,
 } from "./actions";
 import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "@/components/bulk-select";
+import { DateField } from "@/components/date-time";
 
 interface Props {
   rows: TaxInvoiceRow[];
@@ -453,8 +454,8 @@ function TaxInvoiceModal({
               />
             </Field>
           </div>
-          <Field label="작성일자"><TextInput type="date" value={d.doc_date} onChange={(e) => setD({ ...d, doc_date: e.target.value })} /></Field>
-          <Field label="결제예정일 (미수/미지급 관리)"><TextInput type="date" value={d.due_date} onChange={(e) => setD({ ...d, due_date: e.target.value })} /></Field>
+          <Field label="작성일자"><DateField value={d.doc_date} onChange={(v) => setD({ ...d, doc_date: v })} /></Field>
+          <Field label="결제예정일 (미수/미지급 관리)"><DateField value={d.due_date} onChange={(v) => setD({ ...d, due_date: v })} /></Field>
           <Field label="상태">
             <SelectInput value={d.status} onChange={(e) => setD({ ...d, status: e.target.value as TaxInvoiceStatus })}>
               <option value="PENDING">{taxInvoiceStatusLabel(type, "PENDING")}</option>

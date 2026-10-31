@@ -18,6 +18,7 @@ import type {
 import type { ImportCtx } from "@/lib/import-specs";
 import { uploadReceipt, updateReceipt, confirmReceipt, deleteReceipt, bulkConfirmReceipts, bulkDeleteReceipts } from "./actions";
 import { useTableSelection, BulkBar, BulkButton } from "@/components/bulk-select";
+import { DateField } from "@/components/date-time";
 
 interface Props {
   receipts: ReceiptRow[];
@@ -336,7 +337,7 @@ function ReviewModal({
               <Field label="상호"><TextInput value={d.vendor_name} onChange={(e) => setD({ ...d, vendor_name: e.target.value })} /></Field>
             </div>
             <Field label="사업자번호"><TextInput value={d.biz_no} onChange={(e) => setD({ ...d, biz_no: e.target.value })} /></Field>
-            <Field label="거래일자"><TextInput type="date" value={d.doc_date} onChange={(e) => setD({ ...d, doc_date: e.target.value })} /></Field>
+            <Field label="거래일자"><DateField value={d.doc_date} onChange={(v) => setD({ ...d, doc_date: v })} /></Field>
             <Field label="공급가액"><NumberInput value={d.supply_amount} onChange={(v) => setD({ ...d, supply_amount: v })} /></Field>
             <Field label="부가세"><NumberInput value={d.vat_amount} onChange={(v) => setD({ ...d, vat_amount: v })} /></Field>
             <Field label="합계"><NumberInput value={d.total_amount} onChange={(v) => setD({ ...d, total_amount: v })} /></Field>

@@ -14,6 +14,7 @@ import {
   addTaskComment, deleteTaskComment, addChecklistItem, toggleChecklistItem, deleteChecklistItem,
   type TaskInput,
 } from "./actions";
+import { DateField, TimeField } from "@/components/date-time";
 
 // ---------- 타입(page.tsx 공유) ----------
 export interface CalEmployee {
@@ -647,11 +648,11 @@ function TaskModal({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-neutral-500">시작일</span>
-              <input type="date" className={inputCls} value={start} disabled={!editable} onChange={(e) => setStart(e.target.value)} />
+              <DateField value={start} disabled={!editable} onChange={(v) => setStart(v)} />
             </label>
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-neutral-500">마감일</span>
-              <input type="date" className={inputCls} value={due} disabled={!editable} onChange={(e) => setDue(e.target.value)} />
+              <DateField value={due} disabled={!editable} onChange={(v) => setDue(v)} />
             </label>
           </div>
 
@@ -662,9 +663,9 @@ function TaskModal({
             </label>
             {!allDay && (
               <div className="flex items-center gap-2">
-                <input type="time" className={inputCls + " w-auto"} value={startTime} disabled={!editable} onChange={(e) => setStartTime(e.target.value)} />
+                <TimeField value={startTime} disabled={!editable} onChange={(v) => setStartTime(v)} className="w-40" />
                 <span className="text-neutral-400">~</span>
-                <input type="time" className={inputCls + " w-auto"} value={endTime} disabled={!editable} onChange={(e) => setEndTime(e.target.value)} />
+                <TimeField value={endTime} disabled={!editable} onChange={(v) => setEndTime(v)} className="w-40" />
               </div>
             )}
           </div>

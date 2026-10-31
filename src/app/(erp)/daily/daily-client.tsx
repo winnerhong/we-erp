@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, EmptyState } from "@/components/ui";
 import { krw } from "@/lib/labels";
+import { DateField } from "@/components/date-time";
 
 export interface DayItem {
   id: string;
@@ -62,11 +63,11 @@ export function DailyClient({ date, sales, purchases, buys, bankIn, bankOut, mon
           >
             ◀
           </button>
-          <input
-            type="date"
+          <DateField
             value={date}
-            onChange={(e) => e.target.value && go(e.target.value)}
-            className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm"
+            onChange={(v) => v && go(v)}
+            required
+            className="w-60"
           />
           <button
             onClick={() => go(shiftDate(date, 1))}

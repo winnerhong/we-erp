@@ -9,6 +9,7 @@ import { ASSET_STATUS_LABEL, ASSET_STATUS_TONE, MOVE_TYPES, MOVE_TYPE_LABEL, MOV
 import type { MoveType } from "@/lib/assets";
 import { logMovement, deleteAsset, deleteMovement, updateAsset } from "../actions";
 import { computeDepreciation } from "@/lib/depreciation";
+import { DateField } from "@/components/date-time";
 
 interface AssetView {
   id: string; code: string | null; name: string; category: string | null;
@@ -133,7 +134,7 @@ export function AssetDetailClient({
         {depOpen && (
           <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 sm:grid-cols-4">
             <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">취득가</span><NumberInput value={dPrice} onChange={setDPrice} className="w-full" /></label>
-            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">취득일</span><input type="date" className={inputCls} value={dDate} onChange={(e) => setDDate(e.target.value)} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">취득일</span><DateField value={dDate} onChange={(v) => setDDate(v)} /></label>
             <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">내용연수(개월)</span><NumberInput value={dLife} onChange={setDLife} className="w-full" /></label>
             <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">잔존가치</span><NumberInput value={dSalvage} onChange={setDSalvage} className="w-full" /></label>
             <div className="col-span-2 flex justify-end gap-2 sm:col-span-4">
@@ -177,14 +178,14 @@ export function AssetDetailClient({
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">수량</span><NumberInput value={qty} onChange={setQty} className="w-full" /></label>
-          <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">일자</span><input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">일자</span><DateField value={date} onChange={(v) => setDate(v)} /></label>
           {(type === "RENT" || type === "RETURN") && (
             <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">대여처(기관)</span>
               <select className={inputCls} value={partnerId} onChange={(e) => setPartnerId(e.target.value)}><option value="">선택</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
             </label>
           )}
           {type === "RENT" && (
-            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">반납 예정일</span><input type="date" className={inputCls} value={due} onChange={(e) => setDue(e.target.value)} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">반납 예정일</span><DateField value={due} onChange={(v) => setDue(v)} /></label>
           )}
           <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">처리자</span>
             <select className={inputCls} value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}><option value="">선택</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select>

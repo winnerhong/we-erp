@@ -55,6 +55,7 @@ import {
 } from "./group-actions";
 import type { BankTxnGroupRow } from "@/lib/supabase/database.types";
 import type { ClusterSuggestion } from "@/lib/bank-groups";
+import { DateField } from "@/components/date-time";
 
 export interface PartnerOption {
   id: string;
@@ -1685,7 +1686,7 @@ function TaxFromTxnModal({
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="작성일자">
-            <TextInput type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} />
+            <DateField value={docDate} onChange={(v) => setDocDate(v)} />
           </Field>
           <Field label="공급가액">
             <NumberInput
@@ -1893,7 +1894,7 @@ function TxnModal({
     <Modal title={`${account.alias} · 거래 ${row ? "수정" : "추가"}`} onClose={onClose}>
       <div className="grid grid-cols-2 gap-3 p-5">
         <Field label="거래일자" required>
-          <TextInput type="date" value={d.txn_date} onChange={(e) => setD({ ...d, txn_date: e.target.value })} />
+          <DateField value={d.txn_date} onChange={(v) => setD({ ...d, txn_date: v })} />
         </Field>
         <Field label="구분" required>
           <div className="flex gap-1 rounded-lg bg-neutral-100 p-1">

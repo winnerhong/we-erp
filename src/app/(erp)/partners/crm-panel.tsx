@@ -18,6 +18,7 @@ import {
   generateMonthlySettlement, updateSettlementStatus, deleteSettlement, createTaxInvoiceFromSettlement,
   uploadPartnerFile, getPartnerFileUrl, deletePartnerFile,
 } from "./crm-actions";
+import { DateField } from "@/components/date-time";
 
 const ATTACH_CATEGORIES = ["사업자등록증", "통장사본", "계약서", "견적서", "기타"];
 
@@ -242,8 +243,8 @@ function ContractModal({
       <div className="grid grid-cols-2 gap-3">
         <Lbl t="상태"><select className={inputCls} value={status} onChange={(e) => setStatus(e.target.value)}>{Object.entries(CONTRACT_STATUS_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Lbl>
         <Lbl t="정산 단위"><select className={inputCls} value={settle} onChange={(e) => setSettle(e.target.value)}>{Object.entries(SETTLE_UNIT_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Lbl>
-        <Lbl t="시작일"><input type="date" className={inputCls} value={start} onChange={(e) => setStart(e.target.value)} /></Lbl>
-        <Lbl t="종료일"><input type="date" className={inputCls} value={end} onChange={(e) => setEnd(e.target.value)} /></Lbl>
+        <Lbl t="시작일"><DateField value={start} onChange={(v) => setStart(v)} /></Lbl>
+        <Lbl t="종료일"><DateField value={end} onChange={(v) => setEnd(v)} /></Lbl>
         <Lbl t={type === "CLASS" ? "회당 단가" : type === "EVENT" ? "계약 금액" : "대여 단가"}><NumberInput value={unitPrice} onChange={setUnitPrice} className="w-full" /></Lbl>
         <Lbl t="증빙"><select className={inputCls} value={evidence} onChange={(e) => setEvidence(e.target.value)}>{Object.entries(EVIDENCE_TYPE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Lbl>
       </div>
@@ -267,7 +268,7 @@ function ContractModal({
       )}
       {type === "EVENT" && (
         <div className="grid grid-cols-2 gap-3 rounded-lg bg-violet-50/50 p-3">
-          <Lbl t="행사일"><input type="date" className={inputCls} value={eventDate} onChange={(e) => setEventDate(e.target.value)} /></Lbl>
+          <Lbl t="행사일"><DateField value={eventDate} onChange={(v) => setEventDate(v)} /></Lbl>
           <Lbl t="장소"><input className={inputCls} value={place} onChange={(e) => setPlace(e.target.value)} /></Lbl>
           <Lbl t="예상 인원"><NumberInput value={headcount} onChange={setHeadcount} className="w-full" /></Lbl>
           <Lbl t="담당"><select className={inputCls} value={instructor} onChange={(e) => setInstructor(e.target.value)}><option value="">선택</option>{employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</select></Lbl>
@@ -440,7 +441,7 @@ function TxnModal({
       </Lbl>
       <div className="grid grid-cols-2 gap-3">
         <Lbl t="유형"><select className={inputCls} value={type} onChange={(e) => setType(e.target.value)}>{CONTRACT_TYPES.map((t) => <option key={t} value={t}>{CONTRACT_TYPE_LABEL[t]}</option>)}<option value="ETC">기타</option></select></Lbl>
-        <Lbl t="거래일"><input type="date" className={inputCls} value={date} onChange={(e) => setDate(e.target.value)} /></Lbl>
+        <Lbl t="거래일"><DateField value={date} onChange={(v) => setDate(v)} /></Lbl>
       </div>
       <Lbl t="내용"><input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="반/행사명/품목" /></Lbl>
       <div className="grid grid-cols-3 gap-3">

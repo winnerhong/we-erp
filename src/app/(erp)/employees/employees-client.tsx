@@ -59,6 +59,7 @@ import {
   setEmployeeAccountRole,
   revokeEmployeeAccount,
 } from "./actions";
+import { DateField } from "@/components/date-time";
 
 export interface AccountInfo {
   profileId: string;
@@ -730,7 +731,7 @@ function ResignModal({ employee, onClose, onSaved }: { employee: EmployeeRow; on
           </p>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-500">퇴사일</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none" />
+            <DateField value={date} onChange={(v) => setDate(v)} />
           </label>
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-neutral-500">퇴사 사유</span>
@@ -1717,8 +1718,8 @@ function LeaveTab({
               <option key={v} value={v}>{l}</option>
             ))}
           </SelectInput>
-          <TextInput type="date" value={d.start_date} onChange={(e) => setD({ ...d, start_date: e.target.value })} />
-          <TextInput type="date" value={d.end_date} onChange={(e) => setD({ ...d, end_date: e.target.value })} />
+          <DateField value={d.start_date} onChange={(v) => setD({ ...d, start_date: v })} />
+          <DateField value={d.end_date} onChange={(v) => setD({ ...d, end_date: v })} />
           <TextInput value={d.reason} onChange={(e) => setD({ ...d, reason: e.target.value })} placeholder="사유" />
           <button
             onClick={add}
@@ -2006,8 +2007,8 @@ function DocsTab({
                   ))}
                 </SelectInput>
                 <TextInput value={doc.title} onChange={(e) => setDoc({ ...doc, title: e.target.value })} placeholder="제목" />
-                <label className="text-xs text-neutral-500">발급일<TextInput type="date" value={doc.issued_on} onChange={(e) => setDoc({ ...doc, issued_on: e.target.value })} /></label>
-                <label className="text-xs text-neutral-500">만료일<TextInput type="date" value={doc.expires_on} onChange={(e) => setDoc({ ...doc, expires_on: e.target.value })} /></label>
+                <label className="text-xs text-neutral-500">발급일<DateField value={doc.issued_on} onChange={(v) => setDoc({ ...doc, issued_on: v })} /></label>
+                <label className="text-xs text-neutral-500">만료일<DateField value={doc.expires_on} onChange={(v) => setDoc({ ...doc, expires_on: v })} /></label>
               </div>
               <FileButton
                 accept="image/*,application/pdf"
@@ -2113,7 +2114,7 @@ function HistoryTab({ emp, events, memos, onChanged }: { emp: EmployeeRow; event
         </div>
         {adding && (
           <div className="grid grid-cols-2 gap-2 border-b border-neutral-100 bg-neutral-50 p-3 sm:grid-cols-5">
-            <TextInput type="date" value={e.event_date} onChange={(ev) => setE({ ...e, event_date: ev.target.value })} />
+            <DateField value={e.event_date} onChange={(v) => setE({ ...e, event_date: v })} />
             <SelectInput value={e.event_type} onChange={(ev) => setE({ ...e, event_type: ev.target.value })}>
               {["입사", "승진", "부서이동", "급여변동", "휴직", "복직", "계약갱신", "퇴사", "기타"].map((t) => (
                 <option key={t} value={t}>{t}</option>
@@ -2419,7 +2420,7 @@ function EditModal({
 
         {/* 2. 급여·계좌 */}
         <FormSection no={2} title="급여 · 계좌">
-          <Field label="입사일"><TextInput type="date" value={d.hired_on} onChange={(e) => setD({ ...d, hired_on: e.target.value })} /></Field>
+          <Field label="입사일"><DateField value={d.hired_on} onChange={(v) => setD({ ...d, hired_on: v })} /></Field>
           <div />
           <Field label="기본급 (월, 원)"><NumberInput value={d.base_salary} onChange={(v) => setD({ ...d, base_salary: v })} placeholder="2,800,000" /></Field>
           <Field label="시급 (원)"><NumberInput value={d.hourly_wage} onChange={(v) => setD({ ...d, hourly_wage: v })} placeholder="12,000" /></Field>
@@ -2430,7 +2431,7 @@ function EditModal({
 
         {/* 3. 인사기록 */}
         <FormSection no={3} title="인사기록(인적사항)" desc="부양가족 수는 소득세 계산에 사용">
-          <Field label="생년월일"><TextInput type="date" value={d.birth} onChange={(e) => setD({ ...d, birth: e.target.value })} /></Field>
+          <Field label="생년월일"><DateField value={d.birth} onChange={(v) => setD({ ...d, birth: v })} /></Field>
           <Field label="주민등록번호"><TextInput value={d.resident_no} onChange={(e) => setD({ ...d, resident_no: e.target.value })} placeholder="000000-0000000" /></Field>
           <div className={colSpan2}>
             <Field label="주소"><TextInput value={d.address} onChange={(e) => setD({ ...d, address: e.target.value })} placeholder="도로명 주소" /></Field>
@@ -2447,15 +2448,15 @@ function EditModal({
           <Field label="근무요일"><TextInput value={d.work_days} onChange={(e) => setD({ ...d, work_days: e.target.value })} placeholder="월~금" /></Field>
           <Field label="근무 시작"><TextInput value={d.work_start} onChange={(e) => setD({ ...d, work_start: e.target.value })} placeholder="09:00" /></Field>
           <Field label="근무 종료"><TextInput value={d.work_end} onChange={(e) => setD({ ...d, work_end: e.target.value })} placeholder="18:00" /></Field>
-          <Field label="수습 종료일"><TextInput type="date" value={d.probation_end} onChange={(e) => setD({ ...d, probation_end: e.target.value })} /></Field>
-          <Field label="계약 만료일 (계약직)"><TextInput type="date" value={d.contract_end} onChange={(e) => setD({ ...d, contract_end: e.target.value })} /></Field>
+          <Field label="수습 종료일"><DateField value={d.probation_end} onChange={(v) => setD({ ...d, probation_end: v })} /></Field>
+          <Field label="계약 만료일 (계약직)"><DateField value={d.contract_end} onChange={(v) => setD({ ...d, contract_end: v })} /></Field>
         </FormSection>
 
         {/* 5. 4대보험 · 퇴사 */}
         <FormSection no={5} title="4대보험 · 퇴사" desc="보험 가입여부는 ‘근로조건·4대보험’ 탭에서">
-          <Field label="4대보험 취득일"><TextInput type="date" value={d.ins_acquired_on} onChange={(e) => setD({ ...d, ins_acquired_on: e.target.value })} /></Field>
-          <Field label="4대보험 상실일"><TextInput type="date" value={d.ins_lost_on} onChange={(e) => setD({ ...d, ins_lost_on: e.target.value })} /></Field>
-          <Field label="퇴사일"><TextInput type="date" value={d.resigned_on} onChange={(e) => setD({ ...d, resigned_on: e.target.value })} /></Field>
+          <Field label="4대보험 취득일"><DateField value={d.ins_acquired_on} onChange={(v) => setD({ ...d, ins_acquired_on: v })} /></Field>
+          <Field label="4대보험 상실일"><DateField value={d.ins_lost_on} onChange={(v) => setD({ ...d, ins_lost_on: v })} /></Field>
+          <Field label="퇴사일"><DateField value={d.resigned_on} onChange={(v) => setD({ ...d, resigned_on: v })} /></Field>
           <Field label="퇴사사유"><TextInput value={d.resign_reason} onChange={(e) => setD({ ...d, resign_reason: e.target.value })} placeholder="자진/권고/계약만료/해고" /></Field>
         </FormSection>
 

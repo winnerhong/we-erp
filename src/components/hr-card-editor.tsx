@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { HR_FIELDS, HR_SECTIONS, type HrExtra, type HrScalarField, type HrSectionKey, type HrRow } from "@/lib/hr-card";
+import { DateField } from "./date-time";
 
 const inputCls = "w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none";
 
@@ -71,10 +72,12 @@ export function HrCardEditor({
                   <option value="">선택</option>
                   {f.options!.map((o) => <option key={o} value={o}>{o}</option>)}
                 </select>
+              ) : f.type === "date" ? (
+                <DateField value={s[f.key]} onChange={(v) => setS({ ...s, [f.key]: v })} />
               ) : (
                 <input
                   className={inputCls}
-                  type={f.type === "date" ? "date" : "text"}
+                  type="text"
                   value={s[f.key]}
                   placeholder={f.placeholder}
                   onChange={(e) => setS({ ...s, [f.key]: e.target.value })}

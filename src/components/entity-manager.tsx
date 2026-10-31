@@ -14,6 +14,7 @@ import type { ImportKind, ImportCtx } from "@/lib/import-specs";
 import { BulkImport } from "./bulk-import";
 import { Card, Field, TextInput, SelectInput, EmptyState, Badge } from "./ui";
 import { useTableSelection, SelectAllCell, SelectRowCell, BulkBar, BulkButton } from "./bulk-select";
+import { DateField } from "./date-time";
 
 export type FieldType = "text" | "number" | "date" | "select";
 
@@ -375,9 +376,14 @@ export function EntityManager<T extends Row>({
                           </option>
                         ))}
                       </SelectInput>
+                    ) : f.type === "date" ? (
+                      <DateField
+                        value={draft[f.key] ?? ""}
+                        onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))}
+                      />
                     ) : (
                       <TextInput
-                        type={f.type === "date" ? "date" : "text"}
+                        type="text"
                         inputMode={f.type === "number" ? "numeric" : undefined}
                         placeholder={f.placeholder}
                         value={draft[f.key] ?? ""}

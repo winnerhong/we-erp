@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui";
 import { createNotice, updateNotice, deleteNotice, togglePin, publishNotice, bulkDeleteNotices, bulkSetNoticesPin, bulkPublishNotices } from "./actions";
 import { useTableSelection, BulkBar, BulkButton } from "@/components/bulk-select";
+import { DateField } from "@/components/date-time";
 
 export interface NoticeItem {
   id: string; title: string; body: string | null; audience: string;
@@ -177,8 +178,8 @@ function NoticeModal({
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">게시 시작</span><input type="date" className={inputCls} value={start} onChange={(e) => setStart(e.target.value)} /></label>
-            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">게시 종료</span><input type="date" className={inputCls} value={end} onChange={(e) => setEnd(e.target.value)} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">게시 시작</span><DateField value={start} onChange={(v) => setStart(v)} /></label>
+            <label className="block"><span className="mb-1 block text-xs font-medium text-neutral-500">게시 종료</span><DateField value={end} onChange={(v) => setEnd(v)} /></label>
           </div>
           <label className="flex items-center gap-2 text-sm text-neutral-600"><input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} /> 상단 고정</label>
         </div>

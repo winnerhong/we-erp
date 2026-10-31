@@ -38,6 +38,7 @@ import {
 } from "@/lib/tasks";
 import { OrgChart, type OrgEmployee } from "@/components/org-chart";
 import { LibraryBrowser, type LibFile, type LibFolder } from "@/components/library-browser";
+import { DateField } from "@/components/date-time";
 
 type Tab = "att" | "class" | "task" | "org" | "library" | "info" | "pay" | "point" | "leave" | "docs" | "history";
 
@@ -364,7 +365,7 @@ function MyTasksTab({
             <option value="">분류</option>
             {categories.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
-          <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className="rounded-lg border border-neutral-300 px-3 py-2 text-sm" />
+          <DateField value={due} onChange={(v) => setDue(v)} className="w-60" />
           <button disabled={pending} className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-400 disabled:opacity-50">추가</button>
         </form>
       </section>
@@ -1060,8 +1061,8 @@ function LeaveTab({ emp, leaves }: { emp: EmployeeRow; leaves: LeaveRequestRow[]
                 <option key={v} value={v}>{l}</option>
               ))}
             </SelectInput>
-            <TextInput type="date" value={d.start_date} onChange={(e) => setD({ ...d, start_date: e.target.value })} />
-            <TextInput type="date" value={d.end_date} onChange={(e) => setD({ ...d, end_date: e.target.value })} />
+            <DateField value={d.start_date} onChange={(v) => setD({ ...d, start_date: v })} />
+            <DateField value={d.end_date} onChange={(v) => setD({ ...d, end_date: v })} />
             <TextInput value={d.reason} onChange={(e) => setD({ ...d, reason: e.target.value })} placeholder="사유" />
           </div>
           {error && <p className="text-sm text-rose-600">{error}</p>}

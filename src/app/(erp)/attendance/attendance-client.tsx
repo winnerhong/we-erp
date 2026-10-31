@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui";
 import { ATT_STATUS_LABEL, ATT_STATUS_TONE, WORK_MODE_LABEL, fmtDuration } from "@/lib/attendance";
+import { DateField } from "@/components/date-time";
 
 export interface AttRow {
   employeeId: string;
@@ -82,7 +83,7 @@ export function AttendanceClient({ date, rows }: { date: string; rows: AttRow[] 
         <div className="flex items-center gap-1">
           <button onClick={exportCsv} className="mr-1 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50">⬇ CSV</button>
           <button onClick={() => go(shiftDate(date, -1))} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50">◀</button>
-          <input type="date" value={date} onChange={(e) => e.target.value && go(e.target.value)} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm" />
+          <DateField value={date} onChange={(v) => v && go(v)} required className="w-60" />
           <button onClick={() => go(shiftDate(date, 1))} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50">▶</button>
         </div>
       </div>

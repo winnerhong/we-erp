@@ -8,6 +8,7 @@ import { OptionsManager } from "@/components/options-manager";
 import { krw } from "@/lib/labels";
 import type { DailyRecordRow, FieldOptionRow } from "@/lib/supabase/database.types";
 import { addDailyRecord, updateDailyRecord, bulkDeleteDailyRecords } from "./actions";
+import { DateField } from "@/components/date-time";
 
 /** 결제수단(고정값) — 매출/지출 공통. */
 const PAYMENT_METHODS = [
@@ -146,11 +147,11 @@ export function SalesClient({ date, isAll, companyId, companyName, options, rows
             ⚙ 항목
           </button>
           <button onClick={() => go(shiftDate(date, -1))} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50">◀</button>
-          <input
-            type="date"
+          <DateField
             value={date}
-            onChange={(e) => e.target.value && go(e.target.value)}
-            className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm"
+            onChange={(v) => v && go(v)}
+            required
+            className="w-60"
           />
           <button onClick={() => go(shiftDate(date, 1))} className="rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm hover:bg-neutral-50">▶</button>
         </div>
