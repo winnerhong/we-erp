@@ -484,12 +484,6 @@ export function TimeRangeField(props: {
   const len = e - s;
   const off = props.disabled;
 
-  const [lenText, setLenText] = useState(String(len));
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 바깥에서 값이 바뀌면 분 칸도 맞춤
-    setLenText(String(len));
-  }, [len]);
-
   const setRange = (ns: number, ne: number) => {
     if (off) return;
     const a = Math.max(0, Math.min(Math.round(ns), LAST - step));
@@ -498,7 +492,6 @@ export function TimeRangeField(props: {
       setInnerStart(fromMin(a));
       setInnerEnd(fromMin(b));
     }
-    setLenText(String(b - a));
     props.onChange?.(fromMin(a), fromMin(b));
   };
 
@@ -507,13 +500,9 @@ export function TimeRangeField(props: {
   const span = winEnd - winStart;
   // where a clock time sits on the rail (range thumbs travel 12px in from each end)
   const at = (t: number) => `calc(12px + (100% - 24px) * ${(t - winStart) / span})`;
-  const period = (t: number) => (t % 1440 < 720 ? "오전" : "오후");
   const ticks = Array.from({ length: span / 30 + 1 }, (_, i) => winStart + i * 30);
-  const hourNum = (t: number) => {
-    const h = Math.floor(t / 60) % 12;
-    return String(h === 0 ? 12 : h);
-  };
-  const firstHour = ticks.find((t) => t % 60 === 0);
+  // the bar speaks 24-hour (13시, 14:00); the header above keeps 오전/오후
+  const hhmm = (t: number) => `${Math.floor(t / 60) % 24}:${pad(t % 60)}`;
   const title = props["aria-label"] ?? "시간";
 
   const quick = useQuickTimes(props.quickKind);
@@ -527,78 +516,21 @@ export function TimeRangeField(props: {
         {label}
       </button>
     );
-  const commitText = () => setRange(s, s + (Number(lenText) || len));
 
   return (
     <div className={`dt-field dt-range2 ${props.className ?? ""}`} data-unset={!chosen || undefined} data-disabled={off || undefined}>
-      <div className="dt-r-len">
-        <div className="dt-r-times">
-          <TimeField value={chosen ? start : ""} onChange={(v) => v && setRange(toMin(v), toMin(v) + len)} aria-label={`${title} 시작`} trigger={timeBtn(chosen ? formatTimeLabel(start) : "시작", !chosen)} />
-          <span aria-hidden="true">~</span>
-          <TimeField value={chosen ? end : ""} onChange={(v) => v && (toMin(v) > s ? setRange(s, toMin(v)) : setRange(toMin(v) - len, toMin(v)))} aria-label={`${title} 끝`} trigger={timeBtn(chosen ? formatTimeLabel(end) : "끝", !chosen)} />
-        </div>
-        <span className="dt-r-num">
-          <span>진행 {formatDuration(len)}</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            min={step}
-            max={LAST - s}
-            step={5}
-            value={lenText}
-            disabled={off}
-            aria-label="진행 시간(분)"
-            onChange={(ev) => setLenText(ev.target.value)}
-            onBlur={commitText}
-            onKeyDown={(ev) => ev.key === "Enter" && (ev.preventDefault(), commitText())}
-          />
-          분
-        </span>
-      </div>
-
-      <div className="dt-tl">
-        {chosen && (
+      <div className="dt-r-sum">
+        {chosen ? (
           <>
-            <span className="dt-tl-tag dt-tl-tag-start" data-flip={(s - winStart) / span < 0.18 || undefined} data-high={((s - winStart) / span < 0.18 || (winEnd - e) / span < 0.18) && len / span < 0.3 ? true : undefined} style={{ left: at(s) }} aria-hidden="true">
-              시작 {formatTimeLabel(start)}
-            </span>
-            <span className="dt-tl-tag dt-tl-tag-end" data-flip={(winEnd - e) / span < 0.18 || undefined} style={{ left: at(e) }} aria-hidden="true">
-              {formatTimeLabel(end)} 끝
-            </span>
+            <TimeField value={start} onChange={(v) => v && setRange(toMin(v), toMin(v) + len)} aria-label={`${title} 시작`} trigger={timeBtn(formatTimeLabel(start), false)} />
+            <span aria-hidden="true">~</span>
+            <TimeField value={end} onChange={(v) => v && (toMin(v) > s ? setRange(s, toMin(v)) : setRange(toMin(v) - len, toMin(v)))} aria-label={`${title} 끝`} trigger={timeBtn(formatTimeLabel(end), false)} />
+            <em>(진행 {formatDuration(len)})</em>
           </>
+        ) : (
+          <TimeField value="" onChange={(v) => v && setRange(toMin(v), toMin(v) + 120)} aria-label={`${title} 시작`} trigger={timeBtn("시간을 정해 주세요", true)} />
         )}
-        <div className="dt-tl-rail">
-          <div className="dt-tl-track" aria-hidden="true" />
-          <div className="dt-tl-fill" style={{ left: at(s), width: `calc((100% - 24px) * ${len / span})` }} aria-hidden="true" />
-          {/* the start handle sits on top once it is in the right half, so it can still be pulled back left */}
-          <input
-            type="range"
-            className="dt-tl-a"
-            min={winStart}
-            max={winEnd}
-            step={step}
-            value={s}
-            disabled={off}
-            onChange={(ev) => {
-              const v = Number(ev.target.value);
-              setRange(v, Math.max(e, v + step));
-            }}
-            aria-label={`${title} 시작`}
-            aria-valuetext={formatTimeLabel(fromMin(s))}
-            style={{ zIndex: s > winStart + span / 2 ? 3 : 2 }}
-          />
-          <input type="range" className="dt-tl-b" min={winStart} max={winEnd} step={step} value={e} disabled={off} onChange={(ev) => setRange(s, Number(ev.target.value))} aria-label={`${title} 끝`} aria-valuetext={formatTimeLabel(fromMin(e))} />
-        </div>
-        <div className="dt-ticks" aria-hidden="true">
-          {ticks.map((t) => (
-            <button key={t} type="button" tabIndex={-1} disabled={off} data-in={(t >= s && t <= e) || undefined} data-half={t % 60 !== 0 || undefined} style={{ left: at(t) }} onClick={() => (t <= s ? setRange(t, e) : setRange(s, t))}>
-              <small data-show={(t % 60 === 0 && (t === firstHour || t % 720 === 0)) || undefined}>{period(t)}</small>
-              {t % 60 === 0 ? hourNum(t) : <i className="dt-tick-dot" />}
-            </button>
-          ))}
-        </div>
       </div>
-
       {props.quickKind && quick.items && !off && (
         <div className="dt-quick">
           {quick.items.map((q) => {
@@ -655,6 +587,48 @@ export function TimeRangeField(props: {
           {quick.error && <p className="dt-quick-err">{quick.error}</p>}
         </div>
       )}
+
+      <div className="dt-tl">
+        {chosen && (
+          <>
+            <span className="dt-tl-tag dt-tl-tag-start" data-flip={(s - winStart) / span < 0.18 || undefined} data-high={((s - winStart) / span < 0.18 || (winEnd - e) / span < 0.18) && len / span < 0.3 ? true : undefined} style={{ left: at(s) }} aria-hidden="true">
+              {hhmm(s)}
+            </span>
+            <span className="dt-tl-tag dt-tl-tag-end" data-flip={(winEnd - e) / span < 0.18 || undefined} style={{ left: at(e) }} aria-hidden="true">
+              {hhmm(e)}
+            </span>
+          </>
+        )}
+        <div className="dt-tl-rail">
+          <div className="dt-tl-track" aria-hidden="true" />
+          <div className="dt-tl-fill" style={{ left: at(s), width: `calc((100% - 24px) * ${len / span})` }} aria-hidden="true" />
+          {/* the start handle sits on top once it is in the right half, so it can still be pulled back left */}
+          <input
+            type="range"
+            className="dt-tl-a"
+            min={winStart}
+            max={winEnd}
+            step={step}
+            value={s}
+            disabled={off}
+            onChange={(ev) => {
+              const v = Number(ev.target.value);
+              setRange(v, Math.max(e, v + step));
+            }}
+            aria-label={`${title} 시작`}
+            aria-valuetext={formatTimeLabel(fromMin(s))}
+            style={{ zIndex: s > winStart + span / 2 ? 3 : 2 }}
+          />
+          <input type="range" className="dt-tl-b" min={winStart} max={winEnd} step={step} value={e} disabled={off} onChange={(ev) => setRange(s, Number(ev.target.value))} aria-label={`${title} 끝`} aria-valuetext={formatTimeLabel(fromMin(e))} />
+        </div>
+        <div className="dt-ticks" aria-hidden="true">
+          {ticks.map((t) => (
+            <button key={t} type="button" tabIndex={-1} disabled={off} data-in={(t >= s && t <= e) || undefined} data-half={t % 60 !== 0 || undefined} style={{ left: at(t) }} onClick={() => (t <= s ? setRange(t, e) : setRange(s, t))}>
+              {t % 60 === 0 ? `${Math.floor(t / 60) % 24}시` : <i className="dt-tick-dot" />}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <Proxy name={props.startName} value={chosen ? start : ""} required={props.required} />
       <Proxy name={props.endName} value={chosen ? end : ""} required={props.required} />

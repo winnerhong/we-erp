@@ -121,7 +121,7 @@
 .dt-r-num input { flex: none; width: 76px !important; min-height: 40px; height: 40px; border: 0 !important; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; background: #fff; box-shadow: inset 0 0 0 1px var(--dt-g200); font: inherit; font-size: 16px; font-weight: 700; text-align: center; color: var(--dt-g900); }
 .dt-r-num input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--dt-accent); }
 .dt-r-span { font-size: 15px; font-weight: 700; color: var(--dt-g600); }
-.dt-tl { position: relative; padding: 40px 0 38px; }
+.dt-tl { position: relative; padding: 36px 0 24px; }
 .dt-tl-rail { position: relative; height: 28px; }
 .dt-tl-track, .dt-tl-fill { position: absolute; top: 9px; height: 10px; border-radius: 5px; }
 .dt-tl-track { left: 12px; right: 12px; background: var(--dt-g200); }
@@ -139,7 +139,7 @@
 .dt-range2[data-unset] .dt-tl input[type="range"]::-moz-range-thumb { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2), inset 0 0 0 6px var(--dt-g300); background: #fff; }
 .dt-tl input[type="range"]:focus, .dt-tl input[type="range"]:focus-visible { outline: none; box-shadow: none; }
 .dt-tl input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--dt-accent-50), inset 0 0 0 6px var(--dt-accent); }
-.dt-tl-tag { position: absolute; top: 4px; z-index: 4; padding: 4px 9px; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; pointer-events: none; }
+.dt-tl-tag { position: absolute; top: 4px; z-index: 4; padding: 3px 8px; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; pointer-events: none; }
 .dt-tl-tag::after { content: ""; position: absolute; bottom: -4px; border: 4px solid transparent; border-bottom: 0; }
 /* the two tags lean away from each other so they never overlap */
 .dt-tl-tag-start { transform: translateX(calc(-100% + 12px)); background: var(--dt-accent-text); }
@@ -152,12 +152,19 @@
 .dt-tl-tag-start[data-flip]::after { right: auto; left: 8px; }
 .dt-tl-tag-end[data-flip] { transform: translateX(calc(-100% + 12px)); }
 .dt-tl-tag-end[data-flip]::after { left: auto; right: 8px; }
+.dt-r-sum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; font-size: 17px; font-weight: 800; color: var(--dt-g900); }
+.dt-r-sum .dt-field { width: auto; }
+.dt-r-sum > span { color: var(--dt-g400); font-weight: 600; }
+.dt-r-sum em { margin-left: 4px; font-style: normal; font-size: 15px; font-weight: 600; color: var(--dt-g500); }
+.dt-r-sum .dt-r-time { min-height: 0; padding: 2px 4px; border-radius: 6px; background: none; box-shadow: none; font-size: 17px; font-weight: 800; text-decoration: underline dotted var(--dt-g300); text-underline-offset: 4px; }
+.dt-r-sum .dt-r-time:hover, .dt-r-sum .dt-r-time[aria-expanded="true"] { background: var(--dt-accent-50); box-shadow: none; text-decoration-color: var(--dt-accent); }
+.dt-r-sum .dt-r-time[data-empty] { color: var(--dt-accent-text); font-weight: 700; text-decoration: none; background: var(--dt-accent-50); padding: 6px 12px; }
 .dt-r-times { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; color: var(--dt-g400); font-weight: 700; }
 .dt-r-times .dt-field { width: auto; }
 .dt-r-time { min-height: 36px; padding: 0 10px; border: 0; border-radius: 10px; background: #fff; box-shadow: inset 0 0 0 1px var(--dt-g200); color: var(--dt-g900); font: inherit; font-size: 16px; font-weight: 800; cursor: pointer; }
 .dt-r-time:hover, .dt-r-time[aria-expanded="true"] { box-shadow: inset 0 0 0 2px var(--dt-accent); }
 .dt-r-time[data-empty] { color: var(--dt-g400); font-weight: 600; }
-.dt-ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 32px; }
+.dt-ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 18px; }
 .dt-ticks button { position: absolute; top: 0; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%); padding: 0 1px; line-height: 16px; border: 0; background: none; color: var(--dt-g400); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .dt-ticks small { display: block; height: 13px; line-height: 13px; margin-bottom: 1px; font-size: 10px; font-weight: 700; color: var(--dt-g500); visibility: hidden; }
 .dt-ticks small[data-show] { visibility: visible; }
@@ -173,6 +180,7 @@
 .dt-range2[data-disabled] { opacity: 0.6; }
 .dt-range2[data-disabled] .dt-r-time, .dt-range2[data-disabled] input, .dt-range2[data-disabled] .dt-ticks button { cursor: default; }
 .dt-range2[data-disabled] .dt-r-time:hover { box-shadow: inset 0 0 0 1px var(--dt-g200); }
+.dt-range2[data-disabled] .dt-r-sum .dt-r-time:hover { background: none; box-shadow: none; text-decoration-color: var(--dt-g300); }
 .dt-range2[data-disabled] .dt-tl input[type="range"]::-webkit-slider-thumb { pointer-events: none; cursor: default; }
 .dt-range2[data-disabled] .dt-tl input[type="range"]::-moz-range-thumb { pointer-events: none; cursor: default; }
 
