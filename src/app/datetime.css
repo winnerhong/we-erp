@@ -76,6 +76,11 @@
 .dt-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 12px; background: var(--dt-g100); }
 .dt-seg button { min-height: 40px; border: 0; border-radius: 9px; background: none; color: var(--dt-g500); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
 .dt-seg button[aria-checked="true"] { background: #fff; color: var(--dt-g900); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.dt-step { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 10px; }
+.dt-step span { margin-right: 4px; font-size: 13px; font-weight: 600; color: var(--dt-g400); }
+.dt-step button { min-height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--dt-g500); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.dt-step button:hover { background: var(--dt-g50); }
+.dt-step button[aria-checked="true"] { background: var(--dt-accent-50); color: var(--dt-accent-text); }
 .dt-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .dt-col { position: relative; display: flex; flex-direction: column; gap: 2px; height: 220px; overflow-y: auto; scrollbar-width: none; }
 .dt-col::-webkit-scrollbar { display: none; }

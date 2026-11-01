@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const todayISO = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const pad = (n: number) => String(n).padStart(2, "0");
+const MINUTE_STEP_KEY = "dt-minute-step";
 
 export function formatDateLabel(iso: string) {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -223,26 +224,46 @@ export function DateField(props: FieldProps & { min?: string; max?: string }) {
 export function TimeField(props: FieldProps & { step?: number }) {
   const [value, setValue] = useFieldValue(props);
   const { open, setOpen, root } = usePopover();
-  const step = props.step ?? 5;
+  const coarse = props.step ?? 5;
   // the sheet edits a draft; 「확인」 writes it to the field
   const [draft, setDraft] = useState(value || "09:00");
+  // 5분 by default, 1분 on request (remembered per browser)
+  const [fine, setFine] = useState(false);
+  const step = fine ? 1 : coarse;
   const [h24, min] = draft.split(":").map(Number);
   const pm = h24 >= 12;
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
   const minutes = Array.from({ length: Math.ceil(60 / step) }, (_, i) => i * step);
   const lists = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 열 때 한 번만 초안을 채움
-    setDraft(value || "09:00");
+  const centerPicked = () =>
     requestAnimationFrame(() =>
       lists.current?.querySelectorAll<HTMLElement>('[aria-pressed="true"]').forEach((el) => {
         const col = el.parentElement!;
         col.scrollTop = el.offsetTop - col.clientHeight / 2 + el.clientHeight / 2;
       }),
     );
+
+  useEffect(() => {
+    if (!open) return;
+    const seed = value || "09:00";
+    setDraft(seed);
+    let saved = false;
+    try {
+      saved = localStorage.getItem(MINUTE_STEP_KEY) === "1";
+    } catch {}
+    // a value like 09:07 can only be shown in 1분 mode
+    setFine(saved || Number(seed.split(":")[1]) % coarse !== 0);
+    centerPicked();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps -- seed the draft only when opening
+
+  const toggleFine = (next: boolean) => {
+    setFine(next);
+    try {
+      localStorage.setItem(MINUTE_STEP_KEY, next ? "1" : "5");
+    } catch {}
+    centerPicked();
+  };
 
   // built from the latest draft, so quick taps in a row (오후 → 3시 → 15분) all count
   const set = (next: { pm?: boolean; h12?: number; min?: number }) =>
@@ -267,6 +288,16 @@ export function TimeField(props: FieldProps & { step?: number }) {
               </button>
             ))}
           </div>
+          {coarse > 1 && (
+            <div className="dt-step" role="radiogroup" aria-label="분 단위">
+              <span>분 단위</span>
+              {[false, true].map((f) => (
+                <button key={String(f)} type="button" role="radio" aria-checked={fine === f} onClick={() => toggleFine(f)}>
+                  {f ? "1분" : `${coarse}분`}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="dt-cols" ref={lists}>
             <div className="dt-col" aria-label="시">
               {[12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((h) => (
