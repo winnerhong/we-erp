@@ -88,6 +88,73 @@
 .dt-opt:hover { background: var(--dt-g50); color: var(--dt-g700); }
 .dt-opt[aria-pressed="true"] { background: var(--dt-g100); color: var(--dt-g900); font-weight: 800; }
 
+/* time range: 시작 시간 + 진행 시간 바 + 퀵타임 */
+.dt-range2 { box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 16px; background: var(--dt-g50); box-shadow: inset 0 0 0 1px var(--dt-g200); }
+.dt-range2 .dt-trigger { background: #fff; box-shadow: inset 0 0 0 1px var(--dt-g200); }
+.dt-range2 .dt-trigger:not([data-empty]) span { color: var(--dt-accent-text); }
+.dt-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dt-quick-chip { position: relative; display: inline-flex; align-items: center; border-radius: 999px; background: #fff; box-shadow: inset 0 0 0 1px var(--dt-g200); }
+.dt-quick-chip:hover { box-shadow: inset 0 0 0 1px var(--dt-accent); }
+.dt-quick-chip > button:first-child { min-height: 32px; padding: 0 12px; border: 0; background: none; color: var(--dt-g700); font: inherit; font-size: 13px; cursor: pointer; }
+.dt-quick-chip b { font-weight: 800; color: var(--dt-g900); }
+.dt-quick-chip[data-on] { background: var(--dt-accent); box-shadow: none; }
+.dt-quick-chip[data-on] > button, .dt-quick-chip[data-on] b { color: var(--dt-accent-ink); }
+.dt-quick-x { width: 0; min-height: 32px; padding: 0; overflow: hidden; border: 0; background: none; color: var(--dt-g400); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; transition: width 0.12s; }
+.dt-quick-chip:hover .dt-quick-x, .dt-quick-x:focus-visible { width: 26px; padding-right: 8px; }
+.dt-quick-x:hover { color: var(--dt-sun); }
+.dt-quick-chip[data-on] .dt-quick-x { color: var(--dt-accent-ink); }
+.dt-quick-plus { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 1.5px dashed var(--dt-g300); border-radius: 50%; background: none; color: var(--dt-g500); font: inherit; font-size: 18px; font-weight: 600; line-height: 1; cursor: pointer; }
+.dt-quick-plus:hover, .dt-quick-plus[aria-expanded="true"] { border-style: solid; border-color: var(--dt-accent); color: var(--dt-accent-text); background: var(--dt-accent-50); }
+/* hover/focus tooltip for quick-time chips and + */
+.dt-quick [data-tip] { position: relative; }
+.dt-quick [data-tip]:hover::after, .dt-quick [data-tip]:focus-within::after { content: attr(data-tip); position: absolute; z-index: 30; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); width: max-content; max-width: 260px; padding: 7px 10px; border-radius: 8px; background: var(--dt-g900); color: #fff; font-size: 12px; font-weight: 500; line-height: 1.4; white-space: normal; text-align: center; pointer-events: none; }
+.dt-quick-panel { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; background: #fff; }
+.dt-quick-add { display: flex; gap: 8px; flex-wrap: wrap; }
+.dt-quick-add input { flex: 1 1 160px; min-height: 44px; box-sizing: border-box; padding: 0 12px; border: 0; border-radius: 12px; background: var(--dt-g100); font: inherit; font-size: 15px; }
+.dt-quick-add input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--dt-accent); background: #fff; }
+.dt-quick-add .dt-btn { flex: 0 1 auto; padding: 0 16px; }
+.dt-quick-err { margin: 0; font-size: 13px; color: var(--dt-sun); }
+.dt-r-len { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.dt-r-len > b { flex: 1; font-size: 16px; font-weight: 800; color: var(--dt-g900); }
+.dt-r-num { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--dt-g500); }
+.dt-r-num > span { white-space: nowrap; }
+.dt-r-num input { flex: none; width: 76px !important; min-height: 40px; height: 40px; border: 0 !important; box-sizing: border-box; padding: 0 10px; border: 0; border-radius: 10px; background: #fff; box-shadow: inset 0 0 0 1px var(--dt-g200); font: inherit; font-size: 16px; font-weight: 700; text-align: center; color: var(--dt-g900); }
+.dt-r-num input:focus { outline: none; box-shadow: inset 0 0 0 2px var(--dt-accent); }
+.dt-r-span { font-size: 15px; font-weight: 700; color: var(--dt-g600); }
+.dt-tl { position: relative; padding: 38px 0 38px 22px; }
+.dt-tl-rail { position: relative; }
+.dt-tl input[type="range"] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 28px; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; background: transparent; cursor: pointer; }
+.dt-tl input[type="range"]::-webkit-slider-runnable-track { height: 10px; border-radius: 5px; background: linear-gradient(to right, var(--dt-accent) var(--p), var(--dt-g200) var(--p)); }
+.dt-tl input[type="range"]::-moz-range-track { height: 10px; border-radius: 5px; background: linear-gradient(to right, var(--dt-accent) var(--p), var(--dt-g200) var(--p)); }
+.dt-tl input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -7px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 0 0 6px var(--dt-accent); }
+.dt-tl input[type="range"]::-moz-range-thumb { width: 24px; height: 24px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25), inset 0 0 0 6px var(--dt-accent); }
+.dt-tl input[type="range"]:focus-visible { outline: none; }
+.dt-tl input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--dt-accent-50), inset 0 0 0 6px var(--dt-accent); }
+.dt-tl-origin { position: absolute; left: 12px; top: 50%; z-index: 2; transform: translate(-50%, -50%); }
+.dt-tl-origin .dt-field { width: auto; }
+.dt-dot { width: 58px; height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 50%; background: var(--dt-accent); color: var(--dt-accent-ink); font: inherit; line-height: 1.1; cursor: pointer; box-shadow: 0 0 0 4px var(--dt-g50), 0 2px 10px rgba(0, 0, 0, 0.18); transition: transform 0.15s; }
+.dt-dot:hover { transform: scale(1.06); }
+.dt-dot small { font-size: 10px; font-weight: 700; opacity: 0.85; }
+.dt-dot b { font-size: 15px; font-weight: 800; }
+.dt-dot[data-empty] { background: #fff; color: var(--dt-accent-text); box-shadow: 0 0 0 4px var(--dt-g50), inset 0 0 0 2px var(--dt-accent); animation: dt-pulse 1.6s ease-in-out infinite; }
+.dt-dot[aria-expanded="true"] { transform: scale(1.06); box-shadow: 0 0 0 4px var(--dt-accent-50), 0 2px 10px rgba(0, 0, 0, 0.18); }
+@keyframes dt-pulse { 50% { box-shadow: 0 0 0 8px var(--dt-accent-50), inset 0 0 0 2px var(--dt-accent); } }
+.dt-tl-end { position: absolute; top: 0; z-index: 1; transform: translateX(-50%); padding: 4px 10px; border-radius: 8px; background: var(--dt-g900); color: #fff; font-size: 13px; font-weight: 700; white-space: nowrap; pointer-events: none; }
+.dt-tl-end::after { content: ""; position: absolute; left: 50%; bottom: -4px; margin-left: -4px; border: 4px solid transparent; border-bottom: 0; border-top-color: var(--dt-g900); }
+.dt-ticks { position: absolute; left: 22px; right: 0; bottom: 0; height: 32px; }
+.dt-ticks button { position: absolute; top: 0; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%); padding: 0 1px; line-height: 16px; border: 0; background: none; color: var(--dt-g400); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.dt-ticks small { display: block; height: 13px; line-height: 13px; margin-bottom: 1px; font-size: 10px; font-weight: 700; color: var(--dt-g500); visibility: hidden; }
+.dt-ticks small[data-show] { visibility: visible; }
+.dt-tick-dot { display: block; width: 4px; height: 4px; margin-top: 6px; border-radius: 50%; background: var(--dt-g300); }
+.dt-ticks button[data-on] .dt-tick-dot { background: var(--dt-accent); }
+.dt-ticks button { font-size: 13px !important; min-width: 16px; }
+.dt-ticks button[data-on] { color: var(--dt-accent-text); font-weight: 800; }
+
+/* read-only (예: 수정 권한 없는 업무) */
+.dt-range2[data-disabled] { opacity: 0.6; }
+.dt-range2[data-disabled] .dt-dot, .dt-range2[data-disabled] input, .dt-range2[data-disabled] .dt-ticks button { cursor: default; animation: none; }
+.dt-range2[data-disabled] .dt-dot:hover { transform: none; }
+
 /* phone: bottom sheet */
 @media (max-width: 600px) {
   .dt-dim { display: block; position: fixed; inset: 0; z-index: 400; background: rgba(0, 0, 0, 0.45); animation: dt-fade 0.2s ease-out; }
@@ -97,6 +164,9 @@
     box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.12); animation: dt-up 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .dt-time { width: 100%; }
+  .dt-range2 { padding: 14px; }
+  .dt-ticks button[data-half] { display: none; }
+  .dt-quick-x { width: 26px; padding-right: 8px; }
   .dt-sheet-head { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 16px; }
   .dt-grab { width: 40px; height: 4px; border-radius: 2px; background: var(--dt-g200); }
   .dt-sheet-head b { align-self: flex-start; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--dt-g900); }

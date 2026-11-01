@@ -14,7 +14,7 @@ import {
   addTaskComment, deleteTaskComment, addChecklistItem, toggleChecklistItem, deleteChecklistItem,
   type TaskInput,
 } from "./actions";
-import { DateField, TimeField } from "@/components/date-time";
+import { DateField, TimeField, TimeRangeField } from "@/components/date-time";
 
 // ---------- 타입(page.tsx 공유) ----------
 export interface CalEmployee {
@@ -656,18 +656,33 @@ function TaskModal({
             </label>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="space-y-2">
             <label className="flex items-center gap-2 text-sm text-neutral-600">
               <input type="checkbox" checked={allDay} disabled={!editable} onChange={(e) => setAllDay(e.target.checked)} />
               종일
             </label>
-            {!allDay && (
-              <div className="flex items-center gap-2">
-                <TimeField value={startTime} disabled={!editable} onChange={(v) => setStartTime(v)} className="w-40" />
-                <span className="text-neutral-400">~</span>
-                <TimeField value={endTime} disabled={!editable} onChange={(v) => setEndTime(v)} className="w-40" />
+            {!allDay && (!due || !start || due === start ? (
+              // 하루 안의 일정 — 시작 동그라미 + 진행 시간 바
+              <div>
+                <TimeRangeField
+                  start={startTime}
+                  end={endTime}
+                  onChange={(s, e) => { setStartTime(s); setEndTime(e); }}
+                  disabled={!editable}
+                  maxMinutes={600}
+                  barStep={10}
+                  quickKind="task"
+                  aria-label="업무 시간"
+                />
               </div>
-            )}
+            ) : (
+              // 여러 날에 걸친 업무는 끝 시각이 마감일 쪽이라 따로 고름
+              <div className="flex items-center gap-2">
+                <TimeField value={startTime} disabled={!editable} onChange={(v) => setStartTime(v)} className="w-40" aria-label="시작일 시각" />
+                <span className="text-neutral-400">~</span>
+                <TimeField value={endTime} disabled={!editable} onChange={(v) => setEndTime(v)} className="w-40" aria-label="마감일 시각" />
+              </div>
+            ))}
           </div>
 
           {companies.length > 1 && (

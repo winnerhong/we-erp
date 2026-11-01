@@ -59,7 +59,7 @@ import {
   setEmployeeAccountRole,
   revokeEmployeeAccount,
 } from "./actions";
-import { DateField } from "@/components/date-time";
+import { DateField, TimeRangeField } from "@/components/date-time";
 
 export interface AccountInfo {
   profileId: string;
@@ -2446,8 +2446,18 @@ function EditModal({
         <FormSection no={4} title="근로조건">
           <Field label="주 소정근로시간 (h)"><NumberInput value={d.weekly_hours} onChange={(v) => setD({ ...d, weekly_hours: v })} placeholder="40" /></Field>
           <Field label="근무요일"><TextInput value={d.work_days} onChange={(e) => setD({ ...d, work_days: e.target.value })} placeholder="월~금" /></Field>
-          <Field label="근무 시작"><TextInput value={d.work_start} onChange={(e) => setD({ ...d, work_start: e.target.value })} placeholder="09:00" /></Field>
-          <Field label="근무 종료"><TextInput value={d.work_end} onChange={(e) => setD({ ...d, work_end: e.target.value })} placeholder="18:00" /></Field>
+          <div className={`${colSpan2} flex flex-col gap-1 text-sm`}>
+            <span className="font-medium text-neutral-700">근무시간 (시작 ~ 종료)</span>
+            <TimeRangeField
+              start={d.work_start.trim()}
+              end={d.work_end.trim()}
+              onChange={(s, e) => setD({ ...d, work_start: s, work_end: e })}
+              maxMinutes={720}
+              barStep={10}
+              quickKind="work"
+              aria-label="근무시간"
+            />
+          </div>
           <Field label="수습 종료일"><DateField value={d.probation_end} onChange={(v) => setD({ ...d, probation_end: v })} /></Field>
           <Field label="계약 만료일 (계약직)"><DateField value={d.contract_end} onChange={(v) => setD({ ...d, contract_end: v })} /></Field>
         </FormSection>
