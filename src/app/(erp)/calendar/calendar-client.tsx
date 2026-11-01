@@ -669,8 +669,9 @@ function TaskModal({
                   end={endTime}
                   onChange={(s, e) => { setStartTime(s); setEndTime(e); }}
                   disabled={!editable}
-                  maxMinutes={600}
-                  barStep={10}
+                  step={10}
+                  dayStart={7 * 60}
+                  dayEnd={21 * 60}
                   quickKind="task"
                   aria-label="업무 시간"
                 />

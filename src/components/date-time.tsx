@@ -442,25 +442,27 @@ function useQuickTimes(kind?: string) {
 }
 
 /**
- * 시작~끝 timeline: the circle at 0h is the start (tap to pick), drag along the day to the end (or type 분).
+ * 시작~끝 on a day timeline: drag the start handle and the end handle, the time between them is filled in.
+ * Tap a clock tick to move the nearer side, tap the times in the header for an exact pick, or type the 분.
  * Uncontrolled: submits `startName` / `endName` as "HH:MM" (use `defaultStart` / `defaultEnd`).
  * Controlled: pass `start` / `end` and `onChange(start, end)`. Put the date in its own field above.
- * Wrap it in a <div>, not a <label> (the label would re-click the start circle).
+ * Wrap it in a <div>, not a <label> (the label would re-click the time buttons).
  */
 export function TimeRangeField(props: {
   startName?: string;
   endName?: string;
   defaultStart?: string;
   defaultEnd?: string;
-  /** controlled start "HH:MM" ("" = not picked yet) */
+  /** controlled start "HH:MM" ("" = not chosen yet) */
   start?: string;
   /** controlled end "HH:MM" */
   end?: string;
   onChange?: (start: string, end: string) => void;
-  /** longest length on the bar, in minutes (default 8시간) */
-  maxMinutes?: number;
-  /** bar step in minutes (default 10) */
-  barStep?: number;
+  /** handle step in minutes (default 10) */
+  step?: number;
+  /** the part of the day the bar shows, in minutes from midnight (default 7:00 ~ 19:00); it widens to fit the value */
+  dayStart?: number;
+  dayEnd?: number;
   /** turns on 퀵타임 saved in this browser for this kind of time */
   quickKind?: string;
   required?: boolean;
@@ -468,130 +470,130 @@ export function TimeRangeField(props: {
   "aria-label"?: string;
   className?: string;
 }) {
-  const limit = props.maxMinutes ?? 480;
-  const barStep = props.barStep ?? 10;
+  const step = props.step ?? 10;
+  const LAST = DAY_END;
   const controlled = props.start !== undefined;
-  const lenOf = (s?: string, e?: string) => (isHHMM(s) && isHHMM(e) ? toMin(e) - toMin(s) : 0);
-
   const [innerStart, setInnerStart] = useState(isHHMM(props.defaultStart) ? props.defaultStart : "");
-  const initial = lenOf(props.defaultStart, props.defaultEnd);
-  const [innerLen, setInnerLen] = useState(initial > 0 ? initial : Math.min(120, limit));
-
+  const [innerEnd, setInnerEnd] = useState(isHHMM(props.defaultEnd) ? props.defaultEnd : "");
   const start = controlled ? (isHHMM(props.start) ? props.start : "") : innerStart;
-  const ctrlLen = controlled ? lenOf(props.start, props.end) : 0;
-  const len = ctrlLen > 0 ? ctrlLen : innerLen;
-  const startMin = start ? toMin(start) : 0;
-  const dayRoom = start ? DAY_END - startMin : DAY_END;
-  // a saved length longer than the bar still shows as it is (the bar grows to fit it)
-  const max = Math.max(limit, Math.ceil(len / 30) * 30);
-  const used = Math.max(0, Math.min(len, dayRoom));
-  const end = start ? fromMin(startMin + used) : "";
-  const title = props["aria-label"] ?? "시간";
+  const end = controlled ? (isHHMM(props.end) ? props.end : "") : innerEnd;
+  const chosen = !!start && !!end && toMin(end) > toMin(start);
+  // until something is chosen the handles rest at 9:00 ~ 11:00 and nothing is submitted
+  const s = chosen ? toMin(start) : start ? toMin(start) : 9 * 60;
+  const e = chosen ? toMin(end) : Math.min(s + 120, LAST);
+  const len = e - s;
   const off = props.disabled;
 
-  const [lenText, setLenText] = useState(String(used));
+  const [lenText, setLenText] = useState(String(len));
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 바깥에서 값이 바뀌면 분 칸도 맞춤
-    setLenText(String(used));
-  }, [used]);
+    setLenText(String(len));
+  }, [len]);
 
-  const emit = (s: string, l: number) => {
-    if (!controlled) setInnerStart(s);
-    setInnerLen(l);
-    setLenText(String(l));
-    props.onChange?.(s, s ? fromMin(Math.min(toMin(s) + l, DAY_END)) : "");
+  const setRange = (ns: number, ne: number) => {
+    if (off) return;
+    const a = Math.max(0, Math.min(Math.round(ns), LAST - step));
+    const b = Math.max(a + step, Math.min(Math.round(ne), LAST));
+    if (!controlled) {
+      setInnerStart(fromMin(a));
+      setInnerEnd(fromMin(b));
+    }
+    setLenText(String(b - a));
+    props.onChange?.(fromMin(a), fromMin(b));
   };
-  const setLength = (m: number, cap = max) => {
-    const v = Math.max(5, Math.min(cap, dayRoom, Math.round(m)));
-    emit(start, v);
+
+  const winStart = Math.min(props.dayStart ?? 7 * 60, Math.floor(s / 60) * 60);
+  const winEnd = Math.max(props.dayEnd ?? 19 * 60, Math.ceil(e / 60) * 60);
+  const span = winEnd - winStart;
+  // where a clock time sits on the rail (range thumbs travel 12px in from each end)
+  const at = (t: number) => `calc(12px + (100% - 24px) * ${(t - winStart) / span})`;
+  const period = (t: number) => (t % 1440 < 720 ? "오전" : "오후");
+  const ticks = Array.from({ length: span / 30 + 1 }, (_, i) => winStart + i * 30);
+  const hourNum = (t: number) => {
+    const h = Math.floor(t / 60) % 12;
+    return String(h === 0 ? 12 : h);
   };
-  const setStart = (s: string) => emit(s, len);
+  const firstHour = ticks.find((t) => t % 60 === 0);
+  const title = props["aria-label"] ?? "시간";
 
   const quick = useQuickTimes(props.quickKind);
   const [adding, setAdding] = useState(false);
   const [newLabel, setNewLabel] = useState("");
 
-  // ticks on the clock's :00 and :30 after the start; only whole hours get a number (10, 11, 12, 1 …)
-  // on a phone the :30 dots hide
-  const firstTick = start ? Math.floor(startMin / 30) * 30 + 30 - startMin : 30;
-  const ticks = Array.from({ length: Math.max(0, Math.floor((max - firstTick) / 30) + 1) }, (_, i) => firstTick + i * 30);
-  const onHour = (m: number) => (start ? (startMin + m) % 60 === 0 : m % 60 === 0);
-  const hourTicks = ticks.filter(onHour);
-  const period = (m: number) => ((startMin + m) % 1440 < 720 ? "오전" : "오후");
-  // where a length sits on the rail (the range thumb travels 12px in from each end)
-  const at = (m: number) => `calc(12px + (100% - 24px) * ${Math.min(1, m / max)})`;
-  // before a start is picked the ticks count hours from 0 (+1h …); after, they read as the clock
-  const clock = (m: number) => {
-    if (!start) return `+${m / 60}h`;
-    const h = Math.floor(((startMin + m) % 1440) / 60) % 12;
-    return String(h === 0 ? 12 : h);
-  };
-  // 오전/오후 goes on the first numbered tick and where noon/midnight is crossed
-  const showPeriod = (m: number) => !!start && (m === hourTicks[0] || period(m) !== period(m - 60));
-  const commitText = () => setLength(Number(lenText) || len, DAY_END);
+  const timeBtn = (label: string, empty: boolean) =>
+    // eslint-disable-next-line react/display-name -- render prop for TimeField
+    ({ open, toggle }: { open: boolean; toggle: () => void }) => (
+      <button type="button" className="dt-r-time" data-empty={empty || undefined} aria-haspopup="dialog" aria-expanded={open} onClick={toggle} disabled={off}>
+        {label}
+      </button>
+    );
+  const commitText = () => setRange(s, s + (Number(lenText) || len));
 
   return (
-    <div className={`dt-field dt-range2 ${props.className ?? ""}`} data-disabled={off || undefined}>
+    <div className={`dt-field dt-range2 ${props.className ?? ""}`} data-unset={!chosen || undefined} data-disabled={off || undefined}>
       <div className="dt-r-len">
-        <b>{start ? `${formatTimeLabel(start)} ~ ${formatTimeLabel(end)}` : "시작 동그라미를 눌러 시작 시간을 고르세요"}</b>
+        <div className="dt-r-times">
+          <TimeField value={chosen ? start : ""} onChange={(v) => v && setRange(toMin(v), toMin(v) + len)} aria-label={`${title} 시작`} trigger={timeBtn(chosen ? formatTimeLabel(start) : "시작", !chosen)} />
+          <span aria-hidden="true">~</span>
+          <TimeField value={chosen ? end : ""} onChange={(v) => v && (toMin(v) > s ? setRange(s, toMin(v)) : setRange(toMin(v) - len, toMin(v)))} aria-label={`${title} 끝`} trigger={timeBtn(chosen ? formatTimeLabel(end) : "끝", !chosen)} />
+        </div>
         <span className="dt-r-num">
-          <span>진행 {formatDuration(used) || "0분"}</span>
+          <span>진행 {formatDuration(len)}</span>
           <input
             type="number"
             inputMode="numeric"
-            min={5}
-            max={dayRoom}
+            min={step}
+            max={LAST - s}
             step={5}
             value={lenText}
             disabled={off}
             aria-label="진행 시간(분)"
-            onChange={(e) => setLenText(e.target.value)}
+            onChange={(ev) => setLenText(ev.target.value)}
             onBlur={commitText}
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), commitText())}
+            onKeyDown={(ev) => ev.key === "Enter" && (ev.preventDefault(), commitText())}
           />
           분
         </span>
       </div>
 
       <div className="dt-tl">
-        {start && (
-          <span className="dt-tl-end" style={{ left: `clamp(64px, ${at(used)}, calc(100% - 64px))` }} aria-hidden="true">
-            {formatTimeLabel(end)} 끝
-          </span>
+        {chosen && (
+          <>
+            <span className="dt-tl-tag dt-tl-tag-start" data-flip={(s - winStart) / span < 0.18 || undefined} data-high={((s - winStart) / span < 0.18 || (winEnd - e) / span < 0.18) && len / span < 0.3 ? true : undefined} style={{ left: at(s) }} aria-hidden="true">
+              시작 {formatTimeLabel(start)}
+            </span>
+            <span className="dt-tl-tag dt-tl-tag-end" data-flip={(winEnd - e) / span < 0.18 || undefined} style={{ left: at(e) }} aria-hidden="true">
+              {formatTimeLabel(end)} 끝
+            </span>
+          </>
         )}
         <div className="dt-tl-rail">
+          <div className="dt-tl-track" aria-hidden="true" />
+          <div className="dt-tl-fill" style={{ left: at(s), width: `calc((100% - 24px) * ${len / span})` }} aria-hidden="true" />
+          {/* the start handle sits on top once it is in the right half, so it can still be pulled back left */}
           <input
             type="range"
-            min={0}
-            max={max}
-            step={barStep}
-            value={Math.min(used, max)}
+            className="dt-tl-a"
+            min={winStart}
+            max={winEnd}
+            step={step}
+            value={s}
             disabled={off}
-            onChange={(e) => setLength(Number(e.target.value))}
-            aria-label="진행 시간"
-            aria-valuetext={`${formatDuration(used)}${start ? `, ${formatTimeLabel(end)}에 끝` : ""}`}
-            style={{ ["--p" as string]: at(used) }}
+            onChange={(ev) => {
+              const v = Number(ev.target.value);
+              setRange(v, Math.max(e, v + step));
+            }}
+            aria-label={`${title} 시작`}
+            aria-valuetext={formatTimeLabel(fromMin(s))}
+            style={{ zIndex: s > winStart + span / 2 ? 3 : 2 }}
           />
-          <div className="dt-tl-origin">
-            <TimeField
-              value={start}
-              onChange={setStart}
-              required={props.required}
-              aria-label={`${title} 시작`}
-              trigger={({ open, toggle }) => (
-                <button type="button" className="dt-dot" data-empty={!start || undefined} aria-haspopup="dialog" aria-expanded={open} aria-label={`시작 시간: ${start ? formatTimeLabel(start) : "고르기"}`} onClick={toggle} disabled={off}>
-                  <small>{start ? period(0) : "시작"}</small>
-                  <b>{start ? formatTimeLabel(start).replace(/^오[전후] /, "") : "?"}</b>
-                </button>
-              )}
-            />
-          </div>
+          <input type="range" className="dt-tl-b" min={winStart} max={winEnd} step={step} value={e} disabled={off} onChange={(ev) => setRange(s, Number(ev.target.value))} aria-label={`${title} 끝`} aria-valuetext={formatTimeLabel(fromMin(e))} />
         </div>
         <div className="dt-ticks" aria-hidden="true">
-          {ticks.map((m) => (
-            <button key={m} type="button" tabIndex={-1} disabled={off} data-on={m === used || undefined} data-half={!onHour(m) || undefined} style={{ left: at(m) }} onClick={() => setLength(m)}>
-              <small data-show={(onHour(m) && showPeriod(m)) || undefined}>{start ? period(m) : ""}</small>
-              {onHour(m) ? clock(m) : <i className="dt-tick-dot" />}
+          {ticks.map((t) => (
+            <button key={t} type="button" tabIndex={-1} disabled={off} data-in={(t >= s && t <= e) || undefined} data-half={t % 60 !== 0 || undefined} style={{ left: at(t) }} onClick={() => (t <= s ? setRange(t, e) : setRange(s, t))}>
+              <small data-show={(t % 60 === 0 && (t === firstHour || t % 720 === 0)) || undefined}>{period(t)}</small>
+              {t % 60 === 0 ? hourNum(t) : <i className="dt-tick-dot" />}
             </button>
           ))}
         </div>
@@ -600,11 +602,11 @@ export function TimeRangeField(props: {
       {props.quickKind && quick.items && !off && (
         <div className="dt-quick">
           {quick.items.map((q) => {
-            const on = q.start_time === start && q.minutes === used;
-            const qEnd = fromMin(Math.min(toMin(q.start_time) + q.minutes, DAY_END));
+            const on = chosen && q.start_time === start && q.minutes === len;
+            const qEnd = fromMin(Math.min(toMin(q.start_time) + q.minutes, LAST));
             return (
               <span key={q.id} className="dt-quick-chip" data-on={on || undefined} data-tip={`${formatTimeLabel(q.start_time)}부터 ${formatDuration(q.minutes)} (${formatTimeLabel(qEnd)}까지) · 누르면 이 시간으로 바꿔요`}>
-                <button type="button" aria-pressed={on} onClick={() => emit(q.start_time, Math.min(q.minutes, DAY_END - toMin(q.start_time)))}>
+                <button type="button" aria-pressed={on} onClick={() => setRange(toMin(q.start_time), toMin(q.start_time) + q.minutes)}>
                   <b>{q.label}</b> {formatTimeLabel(q.start_time)} · {shortLen(q.minutes)}
                 </button>
                 <button type="button" className="dt-quick-x" onClick={() => quick.remove(q.id)} aria-label={`퀵타임 ${q.label} 지우기`}>
@@ -613,7 +615,14 @@ export function TimeRangeField(props: {
               </span>
             );
           })}
-          <button type="button" className="dt-quick-plus" aria-expanded={adding} aria-label="퀵타임 만들기" data-tip={start ? `지금 시간(${formatTimeLabel(start)} ~ ${formatTimeLabel(end)})을 퀵타임으로 저장해요` : "시작 시간을 고른 뒤 퀵타임으로 저장할 수 있어요"} onClick={() => setAdding((v) => !v)}>
+          <button
+            type="button"
+            className="dt-quick-plus"
+            aria-expanded={adding}
+            aria-label="퀵타임 만들기"
+            data-tip={chosen ? `지금 시간(${formatTimeLabel(start)} ~ ${formatTimeLabel(end)})을 퀵타임으로 저장해요` : "시간을 정한 뒤 퀵타임으로 저장할 수 있어요"}
+            onClick={() => setAdding((v) => !v)}
+          >
             +
           </button>
         </div>
@@ -623,8 +632,8 @@ export function TimeRangeField(props: {
           <div className="dt-quick-add">
             <input
               value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+              onChange={(ev) => setNewLabel(ev.target.value)}
+              onKeyDown={(ev) => ev.key === "Enter" && ev.preventDefault()}
               maxLength={20}
               placeholder="퀵타임 이름 (예: 오전 회의)"
               aria-label="퀵타임 이름"
@@ -633,21 +642,22 @@ export function TimeRangeField(props: {
             <button
               type="button"
               className="dt-btn dt-btn-primary"
-              disabled={!start || !newLabel.trim()}
+              disabled={!chosen || !newLabel.trim()}
               onClick={async () => {
-                await quick.add(newLabel, start, used);
+                await quick.add(newLabel, start, len);
                 setNewLabel("");
                 setAdding(false);
               }}
             >
-              {start ? `${formatTimeLabel(start)} · ${formatDuration(used)} 저장` : "시작 시간을 먼저 골라 주세요"}
+              {chosen ? `${formatTimeLabel(start)} · ${formatDuration(len)} 저장` : "시간을 먼저 정해 주세요"}
             </button>
           </div>
           {quick.error && <p className="dt-quick-err">{quick.error}</p>}
         </div>
       )}
-      <Proxy name={props.startName} value={start} required={props.required} />
-      <Proxy name={props.endName} value={end} required={props.required} />
+
+      <Proxy name={props.startName} value={chosen ? start : ""} required={props.required} />
+      <Proxy name={props.endName} value={chosen ? end : ""} required={props.required} />
     </div>
   );
 }

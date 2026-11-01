@@ -2452,8 +2452,9 @@ function EditModal({
               start={d.work_start.trim()}
               end={d.work_end.trim()}
               onChange={(s, e) => setD({ ...d, work_start: s, work_end: e })}
-              maxMinutes={720}
-              barStep={10}
+              step={10}
+              dayStart={6 * 60}
+              dayEnd={22 * 60}
               quickKind="work"
               aria-label="근무시간"
             />
